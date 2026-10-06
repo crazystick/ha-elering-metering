@@ -61,10 +61,11 @@
       }
     },
     "error": {
-      "invalid_auth": "Elering rejected the client ID or client secret.",
+      "invalid_auth": "Elering's login service rejected this client ID and secret. Check that you copied the whole secret, that the ID and secret are not swapped, and that the key is still active in the Estfeed portal. The Home Assistant log shows Elering's reason.",
       "cannot_connect": "Could not reach the Estfeed API. Try again later.",
       "slug_in_use": "Another Estfeed installation already uses this name.",
-      "already_configured": "This API key is already used by another Estfeed installation."
+      "already_configured": "This API key is already used by another Estfeed installation.",
+      "no_access": "Elering accepted the API key but refused access to metering data. Check in the Estfeed portal that the key is active and has access to your metering points. The Home Assistant log shows Elering's reason."
     },
     "abort": {
       "already_configured": "This API key is already configured.",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-elering-metering"
-version = "0.3.0"
+version = "0.3.1"
 description = "Home Assistant integration for Elering Estfeed metering data"
 requires-python = ">=3.13"
 license = "MIT"

@@ -146,6 +146,23 @@ class MeterData:
         )
 
 
+async def _oauth_error(resp: aiohttp.ClientResponse) -> str:
+    """Standard OAuth ``error``/``error_description`` from a token response.
+
+    These are fixed server-side codes such as ``invalid_client`` that never
+    contain the submitted secret, so they are safe to log and show.
+    """
+    try:
+        payload = await resp.json(content_type=None)
+    except (aiohttp.ClientError, ValueError):
+        return "no error details"
+    if not isinstance(payload, dict) or not payload.get("error"):
+        return "no error details"
+    error = str(payload["error"])
+    description = payload.get("error_description")
+    return error_detail(f"{error}: {description}" if description else error)
+
+
 class EstfeedClient:
     """HTTP client for the Estfeed public API."""
 
@@ -297,7 +314,10 @@ class EstfeedClient:
             timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
         ) as resp:
             if resp.status in (400, 401, 403):
-                raise EstfeedAuthError(f"Token request failed: {resp.status}")
+                raise EstfeedLoginError(
+                    f"Elering login rejected the API key ({resp.status}: "
+                    f"{await _oauth_error(resp)})"
+                )
             if resp.status == 429:
                 raise EstfeedRateLimitError(f"Token request failed: {resp.status}")
             if resp.status != 200:
@@ -319,6 +339,14 @@ class EstfeedError(Exception):
 
 class EstfeedAuthError(EstfeedError):
     """Authentication / authorisation failure (401, 403, Keycloak failure)."""
+
+
+class EstfeedLoginError(EstfeedAuthError):
+    """The login service rejected the client ID / secret pair itself.
+
+    Distinguished from a plain ``EstfeedAuthError`` (the key logged in, but
+    the Estfeed API refused it) so the UI can tell the user which one to fix.
+    """
 
 
 class EstfeedRateLimitError(EstfeedError):

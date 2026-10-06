@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -28,7 +29,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import EstfeedAuthError, EstfeedClient, EstfeedError
+from .api import EstfeedAuthError, EstfeedClient, EstfeedError, EstfeedLoginError
 from .const import (
     CONF_BACKFILL_MONTHS,
     CONF_CLIENT_ID,
@@ -55,6 +56,8 @@ from .const import (
     Resolution,
 )
 from .utils import slugify
+
+_LOGGER = logging.getLogger(__name__)
 
 ESTFEED_PORTAL_URL = "https://estfeed.elering.ee/"
 
@@ -220,9 +223,14 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_check_credentials(self, credentials: Mapping[str, Any]) -> dict[str, str]:
         try:
             await _validate(self.hass, credentials)
-        except EstfeedAuthError:
+        except EstfeedLoginError as err:
+            _LOGGER.warning("Estfeed credential check failed: %s", err)
             return {"base": "invalid_auth"}
-        except EstfeedError:
+        except EstfeedAuthError as err:
+            _LOGGER.warning("Estfeed API refused the API key: %s", err)
+            return {"base": "no_access"}
+        except EstfeedError as err:
+            _LOGGER.warning("Could not reach Estfeed during setup: %s", err)
             return {"base": "cannot_connect"}
         return {}
 

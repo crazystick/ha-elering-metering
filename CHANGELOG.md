@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-06
+
+### Fixed
+
+- Setup no longer shows the same "rejected" message for two different problems. A wrong client ID or secret and a key that logs in but has no access to metering data now get separate messages, each saying what to check.
+- When Elering rejects a key, the Home Assistant log now records Elering's reason (for example `invalid_client`). The secret is never logged.
+
 ## [0.3.0] - 2026-10-05
 
 First release of this fork of [tehisain/ha-estfeed](https://github.com/tehisain/ha-estfeed) (0.2.5).

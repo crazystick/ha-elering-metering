@@ -61,10 +61,11 @@
       }
     },
     "error": {
-      "invalid_auth": "Elering lükkas kliendi ID või saladuse tagasi.",
+      "invalid_auth": "Eleringi sisselogimisteenus lükkas selle kliendi ID ja saladuse tagasi. Kontrolli, et kopeerisid kogu saladuse, et ID ja saladus ei ole vahetuses ning et võti on Estfeedi portaalis endiselt aktiivne. Eleringi põhjus on kirjas Home Assistanti logis.",
       "cannot_connect": "Estfeedi API-ga ei õnnestunud ühendust luua. Proovi hiljem uuesti.",
       "slug_in_use": "Teine Estfeedi paigaldus kasutab juba seda nime.",
-      "already_configured": "Seda API võtit kasutab juba teine Estfeedi paigaldus."
+      "already_configured": "Seda API võtit kasutab juba teine Estfeedi paigaldus.",
+      "no_access": "Elering võttis API võtme vastu, kuid keeldus mõõteandmetele ligipääsust. Kontrolli Estfeedi portaalis, et võti on aktiivne ja sellel on ligipääs sinu mõõtepunktidele. Eleringi põhjus on kirjas Home Assistanti logis."
     },
     "abort": {
       "already_configured": "See API võti on juba seadistatud.",

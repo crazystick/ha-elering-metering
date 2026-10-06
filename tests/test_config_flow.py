@@ -12,7 +12,9 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.estfeed.api import (
+    EstfeedAPIError,
     EstfeedAuthError,
+    EstfeedLoginError,
     MeteringPoint,
     Period,
 )
@@ -179,6 +181,37 @@ async def test_user_step_form_never_echoes_secret(hass):
     assert "super-secret-value" not in repr(result2["data_schema"].schema)
 
 
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (EstfeedLoginError("401: invalid_client"), "invalid_auth"),
+        (EstfeedAuthError("403: forbidden"), "no_access"),
+        (EstfeedAPIError("503: unavailable"), "cannot_connect"),
+    ],
+)
+async def test_user_step_explains_which_check_failed(hass, caplog, error, expected):
+    await _setup_recorder(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    with patch(
+        "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
+        new=AsyncMock(side_effect=error),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_CLIENT_ID: "cid",
+                CONF_CLIENT_SECRET: "csec",
+                CONF_FRIENDLY_NAME: "Home",
+            },
+        )
+    assert result2["errors"] == {"base": expected}
+    # Elering's reason is logged so the user can see why, without the secret.
+    assert str(error) in caplog.text
+    assert "csec" not in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_user_step_bad_credentials_shows_form_error(hass):
     await _setup_recorder(hass)
@@ -188,7 +221,7 @@ async def test_user_step_bad_credentials_shows_form_error(hass):
 
     with patch(
         "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
-        new=AsyncMock(side_effect=EstfeedAuthError("bad")),
+        new=AsyncMock(side_effect=EstfeedLoginError("401: invalid_client")),
     ):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
