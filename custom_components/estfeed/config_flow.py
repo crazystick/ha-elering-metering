@@ -41,6 +41,7 @@ from .const import (
     CONF_RESOLUTION,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
+    CUSTOMER_PORTAL_URL,
     DEFAULT_BACKFILL_MONTHS,
     DEFAULT_FRIENDLY_NAME,
     DEFAULT_MARGIN_EUR_PER_KWH,
@@ -58,8 +59,6 @@ from .const import (
 from .utils import slugify
 
 _LOGGER = logging.getLogger(__name__)
-
-ESTFEED_PORTAL_URL = "https://estfeed.elering.ee/"
 
 _TEXT = TextSelector()
 _PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
@@ -179,15 +178,18 @@ def _clean_credentials(user_input: Mapping[str, Any]) -> dict[str, Any]:
     return data
 
 
-async def _validate(hass: HomeAssistant, credentials: Mapping[str, Any]) -> None:
-    """Prove the credentials work by listing the key's metering points."""
-    client = EstfeedClient(
+def _client(hass: HomeAssistant, credentials: Mapping[str, Any]) -> EstfeedClient:
+    return EstfeedClient(
         session=async_get_clientsession(hass),
         client_id=credentials[CONF_CLIENT_ID],
         client_secret=credentials[CONF_CLIENT_SECRET],
     )
+
+
+async def _validate(hass: HomeAssistant, credentials: Mapping[str, Any]) -> None:
+    """Prove the credentials work by listing the key's metering points."""
     end = datetime.now(tz=UTC)
-    await client.list_metering_points(end - timedelta(days=7), end)
+    await _client(hass, credentials).list_metering_points(end - timedelta(days=7), end)
 
 
 class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -225,6 +227,14 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
             await _validate(self.hass, credentials)
         except EstfeedLoginError as err:
             _LOGGER.warning("Estfeed credential check failed: %s", err)
+            if await _client(self.hass, credentials).async_is_datahub_technical_user():
+                _LOGGER.warning(
+                    "These credentials belong to an Estfeed Datahub technical user, "
+                    "which cannot read the customer API. Create an API key in the "
+                    "e-Elering customer portal (%s) instead",
+                    CUSTOMER_PORTAL_URL,
+                )
+                return {"base": "datahub_key"}
             return {"base": "invalid_auth"}
         except EstfeedAuthError as err:
             _LOGGER.warning("Estfeed API refused the API key: %s", err)
@@ -259,7 +269,7 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
                 with_name=True,
             ),
             errors=errors,
-            description_placeholders={"portal_url": ESTFEED_PORTAL_URL},
+            description_placeholders={"portal_url": CUSTOMER_PORTAL_URL},
         )
 
     async def async_step_pricing(
@@ -322,7 +332,7 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=_credentials_schema(entry.data, with_name=False),
             errors=errors,
             description_placeholders={
-                "portal_url": ESTFEED_PORTAL_URL,
+                "portal_url": CUSTOMER_PORTAL_URL,
                 "name": entry.title,
             },
         )

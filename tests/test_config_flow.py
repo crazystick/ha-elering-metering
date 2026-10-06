@@ -39,13 +39,20 @@ from custom_components.estfeed.const import (
 
 @pytest.fixture(autouse=True)
 def _no_entry_setup():
-    """Flow tests stop at the config entry; never run the real entry setup.
+    """Flow tests stop at the config entry; never run the real entry setup,
+    and never probe Elering's Datahub login over the network.
 
     Creating or reloading an entry schedules ``async_setup_entry``. Left
     unpatched it would run after the test's API mocks are gone and race the
     in-memory recorder teardown.
     """
-    with patch("custom_components.estfeed.async_setup_entry", return_value=True):
+    with (
+        patch("custom_components.estfeed.async_setup_entry", return_value=True),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
         yield
 
 
@@ -194,9 +201,15 @@ async def test_user_step_explains_which_check_failed(hass, caplog, error, expect
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    with patch(
-        "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
-        new=AsyncMock(side_effect=error),
+    with (
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
+            new=AsyncMock(side_effect=error),
+        ),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=False),
+        ),
     ):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -459,3 +472,33 @@ async def test_options_flow_defaults_to_estonian_vat_and_zero_margin(hass):
     assert rendered[CONF_VAT_MODE] == DEFAULT_VAT_MODE
     assert rendered[CONF_VAT_PERCENT] == DEFAULT_VAT_PERCENT
     assert rendered[CONF_MARGIN_EUR_PER_KWH] == DEFAULT_MARGIN_EUR_PER_KWH
+
+
+async def test_user_step_recognises_datahub_technical_user(hass, caplog):
+    """Datahub technical-user credentials are rejected by the customer login;
+    setup must say which kind of key to create instead of a generic error."""
+    await _setup_recorder(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    with (
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
+            new=AsyncMock(side_effect=EstfeedLoginError("401: invalid_client")),
+        ),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_CLIENT_ID: "cid",
+                CONF_CLIENT_SECRET: "csec",
+                CONF_FRIENDLY_NAME: "Home",
+            },
+        )
+    assert result2["errors"] == {"base": "datahub_key"}
+    assert "kliendiportaal.elering.ee" in caplog.text
+    assert "csec" not in caplog.text

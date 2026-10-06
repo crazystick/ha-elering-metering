@@ -14,4 +14,4 @@ You can expect an acknowledgement within a week. Once a fix is released, the adv
 
 ## Handling your data in reports
 
-Never post your Estfeed **client secret** anywhere. If you share diagnostics or logs, download diagnostics from the integration page (secrets and meter codes are redacted automatically) and check the content before attaching it. If a secret was exposed, revoke the API key in the [Estfeed portal](https://estfeed.elering.ee/) and create a new one.
+Never post your Estfeed **client secret** anywhere. If you share diagnostics or logs, download diagnostics from the integration page (secrets and meter codes are redacted automatically) and check the content before attaching it. If a secret was exposed, revoke the API key in the [e-Elering customer portal](https://kliendiportaal.elering.ee/) and create a new one.

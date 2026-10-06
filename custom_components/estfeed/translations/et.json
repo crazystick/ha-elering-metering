@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Ühenda Elering Estfeediga",
-        "description": "Loo API võti [Estfeedi portaalis]({portal_url}) ning sisesta selle andmed allpool. Andmeid saadetakse ainult Eleringile.",
+        "description": "Loo API võti [e-Eleringi kliendiportaalis]({portal_url}) ning sisesta selle kliendi ID ja saladus allpool. Andmeid saadetakse ainult Eleringile.\n\nKasuta kliendiportaalis loodud võtit. Estfeedi andmelao portaali (estfeed.elering.ee) *tehniline kasutaja* ei sobi.",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)",
           "friendly_name": "Paigalduse nimi"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele.",
           "friendly_name": "Kasutatakse olemite ja statistika ID-des, nt \"Kodu\" → estfeed:kodu_consumption_…. Hiljem muutes kaob ajalugu."
         }
@@ -37,35 +37,36 @@
       },
       "reauth_confirm": {
         "title": "Estfeedi uuesti autentimine",
-        "description": "Paigalduse **{name}** API võti lükati tagasi. Sisesta kehtiv võti [Estfeedi portaalist]({portal_url}).",
+        "description": "Paigalduse **{name}** API võti lükati tagasi. Sisesta kehtiv võti [e-Eleringi kliendiportaalist]({portal_url}).",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele."
         }
       },
       "reconfigure": {
         "title": "Muuda API võtit",
-        "description": "Sisesta paigaldusele **{name}** uued API andmed [Estfeedi portaalist]({portal_url}). Ajalugu ja olemid säilivad.",
+        "description": "Sisesta paigaldusele **{name}** uued API andmed [e-Eleringi kliendiportaalist]({portal_url}). Ajalugu ja olemid säilivad.",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele."
         }
       }
     },
     "error": {
-      "invalid_auth": "Eleringi sisselogimisteenus lükkas selle kliendi ID ja saladuse tagasi. Kontrolli, et kopeerisid kogu saladuse, et ID ja saladus ei ole vahetuses ning et võti on Estfeedi portaalis endiselt aktiivne. Eleringi põhjus on kirjas Home Assistanti logis.",
+      "invalid_auth": "Eleringi sisselogimisteenus lükkas selle kliendi ID ja saladuse tagasi. Kontrolli, et võti on loodud e-Eleringi kliendiportaalis (kliendiportaal.elering.ee), et kopeerisid kogu saladuse, et ID ja saladus ei ole vahetuses ning et võti on endiselt aktiivne. Eleringi põhjus on kirjas Home Assistanti logis.",
       "cannot_connect": "Estfeedi API-ga ei õnnestunud ühendust luua. Proovi hiljem uuesti.",
       "slug_in_use": "Teine Estfeedi paigaldus kasutab juba seda nime.",
       "already_configured": "Seda API võtit kasutab juba teine Estfeedi paigaldus.",
-      "no_access": "Elering võttis API võtme vastu, kuid keeldus mõõteandmetele ligipääsust. Kontrolli Estfeedi portaalis, et võti on aktiivne ja sellel on ligipääs sinu mõõtepunktidele. Eleringi põhjus on kirjas Home Assistanti logis."
+      "no_access": "Elering võttis API võtme vastu, kuid keeldus mõõteandmetele ligipääsust. Kontrolli e-Eleringi kliendiportaalis, et võti on aktiivne ja sellel on ligipääs sinu mõõtepunktidele. Eleringi põhjus on kirjas Home Assistanti logis.",
+      "datahub_key": "Need on Estfeedi andmelao tehnilise kasutaja andmed (estfeed.elering.ee), millega sinu mõõteandmeid lugeda ei saa. Loo API võti e-Eleringi kliendiportaalis (kliendiportaal.elering.ee) ja kasuta seda."
     },
     "abort": {
       "already_configured": "See API võti on juba seadistatud.",

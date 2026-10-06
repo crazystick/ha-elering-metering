@@ -4,7 +4,7 @@
 [![HACS Custom](https://img.shields.io/badge/HACS-custom-41BDF5)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Bring your **actual metered electricity and gas consumption** from [Elering Estfeed](https://estfeed.elering.ee/), Estonia's energy data hub, into Home Assistant: the Energy dashboard, history and automations. Electricity costs and solar compensation are calculated from the hourly Nord Pool spot price, with the correct Estonian VAT for every day of your history.
+Bring your **actual metered electricity and gas consumption** from Elering Estfeed, Estonia's energy data hub, into Home Assistant: the Energy dashboard, history and automations. Electricity costs and solar compensation are calculated from the hourly Nord Pool spot price, with the correct Estonian VAT for every day of your history.
 
 - **Real meter data.** The same hourly readings your network operator bills you for. Up to 7 years of history is imported.
 - **Energy dashboard ready.** Long-term statistics for consumption, production (return to grid), cost and compensation.
@@ -17,7 +17,9 @@ Bring your **actual metered electricity and gas consumption** from [Elering Estf
 ## Requirements
 
 - Home Assistant 2024.12 or newer, with the recorder enabled (it is by default).
-- An Estfeed API key (a client ID and client secret). Log in to the [Estfeed portal](https://estfeed.elering.ee/) and create one. The key can read the metering points your account has access to.
+- An API key (a client ID and client secret) from the **[e-Elering customer portal](https://kliendiportaal.elering.ee/)**. Log in, create an API key, and copy both values right away. The key can read the metering points your account has access to.
+
+> **Use the customer portal, not the Estfeed Datahub portal.** A *technical user* created at `estfeed.elering.ee` also has a client ID and secret, but those are for market participants and are rejected here. Setup detects this and tells you.
 
 ## Installation
 
@@ -113,7 +115,7 @@ Without `entry_id`, an action applies to every Estfeed installation. A `reset_at
 - **Network access.** The integration only connects, over HTTPS, to `kc.elering.ee` (sign-in), `estfeed.elering.ee` (meter data) and `dashboard.elering.ee` (public spot prices). Nothing is sent anywhere else.
 - **Credentials.** The client ID and secret are stored in Home Assistant's config entry storage, like every other integration's credentials, and are sent only to Elering's sign-in service. The secret field is masked in the UI and never shown again. Protect your Home Assistant backups, because they contain these credentials.
 - **Diagnostics and logs.** Downloaded diagnostics redact the API key and meter EIC codes. Log messages and error texts show only the last four characters of an EIC. Please still review anything you paste into a public issue.
-- **Least privilege.** Create a dedicated API key for Home Assistant and revoke it in the Estfeed portal if you stop using the integration.
+- **Least privilege.** Create a dedicated API key for Home Assistant and revoke it in the e-Elering customer portal if you stop using the integration.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
@@ -121,7 +123,9 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 | Symptom | What to check |
 | --- | --- |
-| *Elering rejected the client ID or client secret* | Copy both values again from the Estfeed portal. Make sure the key is still active. |
+| *Elering's login service rejected this client ID and secret* | Make sure the key was created in the [e-Elering customer portal](https://kliendiportaal.elering.ee/), not as a technical user at `estfeed.elering.ee`. Copy both values again and check they are not swapped. The log line starting with `Estfeed credential check failed` shows Elering's reason. |
+| *These are Estfeed Datahub technical-user credentials* | You created a Datahub technical user. Create an API key in the e-Elering customer portal instead. |
+| *Elering accepted the API key but refused access* | The key logs in but cannot read meter data. Check the key is active and linked to your metering points in the customer portal. |
 | Sensors show *unavailable* right after setup | Wait for the background import to finish. The first readings can take a few minutes to appear. |
 | *Data fresh* is off | Estfeed has not published new readings for over 30 hours. This is usually a delay at the network operator. |
 | Costs look wrong | Check the margin is entered **excluding VAT** and in EUR (not cents). Then download diagnostics from the integration page to compare cached prices. |

@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- **Setup pointed to the wrong portal.** The setup dialog and README linked to the Estfeed Datahub portal (`estfeed.elering.ee`). Its *technical users* have a client ID and secret too, but they cannot log in to the customer API, so setup rejected them. API keys must be created in the [e-Elering customer portal](https://kliendiportaal.elering.ee/); all links and texts now say so.
+- Setup recognises Estfeed Datahub technical-user credentials and says so, instead of reporting a generic rejection.
 - Setup no longer shows the same "rejected" message for two different problems. A wrong client ID or secret and a key that logs in but has no access to metering data now get separate messages, each saying what to check.
 - When Elering rejects a key, the Home Assistant log now records Elering's reason (for example `invalid_client`). The secret is never logged.
 

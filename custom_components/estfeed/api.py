@@ -16,6 +16,7 @@ import aiohttp
 
 from .const import (
     API_BASE_URL,
+    DATAHUB_TOKEN_URL,
     KEYCLOAK_TOKEN_URL,
     MAX_EICS_PER_REQUEST,
     RATE_LIMIT_SECONDS,
@@ -301,6 +302,29 @@ class EstfeedClient:
             return [MeterData.from_dict(item) for item in payload]
         except (KeyError, TypeError, ValueError, AttributeError) as err:
             raise EstfeedAPIError("Invalid metering-data response") from err
+
+    async def async_is_datahub_technical_user(self) -> bool:
+        """True if the credentials log in to the Estfeed Datahub realm instead.
+
+        Called only after the customer login rejected them, to tell the user
+        they created an Estfeed Datahub technical user rather than an e-Elering
+        customer API key. Any failure counts as "no"; the token is discarded.
+        """
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "scope": "openid",
+        }
+        try:
+            async with self._session.post(
+                DATAHUB_TOKEN_URL,
+                data=data,
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
+            ) as resp:
+                return resp.status == 200
+        except (aiohttp.ClientError, TimeoutError):
+            return False
 
     async def _fetch_token(self, now_monotonic: float) -> tuple[str, float]:
         data = {

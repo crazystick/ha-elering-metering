@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Connect to Elering Estfeed",
-        "description": "Create an API key in the [Estfeed portal]({portal_url}) and enter its credentials below. The credentials are only sent to Elering.",
+        "description": "Create an API key in the [e-Elering customer portal]({portal_url}) and enter its client ID and secret below. The credentials are only sent to Elering.\n\nUse a key from the customer portal. A *technical user* from the Estfeed Datahub portal (estfeed.elering.ee) will not work.",
         "data": {
           "client_id": "Client ID",
           "client_secret": "Client secret",
           "friendly_name": "Installation name"
         },
         "data_description": {
-          "client_id": "The UUID shown for your API key in the Estfeed portal.",
+          "client_id": "The UUID shown for your API key in the e-Elering customer portal.",
           "client_secret": "Shown when the API key is created. Kept only in your Home Assistant configuration and sent only to Elering's login service.",
           "friendly_name": "Used in entity and statistic IDs, e.g. \"Home\" → estfeed:home_consumption_…. Cannot be changed later without losing history."
         }
@@ -37,35 +37,36 @@
       },
       "reauth_confirm": {
         "title": "Re-authenticate Estfeed",
-        "description": "The API key for **{name}** was rejected. Enter a valid key from the [Estfeed portal]({portal_url}).",
+        "description": "The API key for **{name}** was rejected. Enter a valid key from the [e-Elering customer portal]({portal_url}).",
         "data": {
           "client_id": "Client ID",
           "client_secret": "Client secret"
         },
         "data_description": {
-          "client_id": "The UUID shown for your API key in the Estfeed portal.",
+          "client_id": "The UUID shown for your API key in the e-Elering customer portal.",
           "client_secret": "Shown when the API key is created. Kept only in your Home Assistant configuration and sent only to Elering's login service."
         }
       },
       "reconfigure": {
         "title": "Change API key",
-        "description": "Enter new API credentials for **{name}** from the [Estfeed portal]({portal_url}). History and entities are kept.",
+        "description": "Enter new API credentials for **{name}** from the [e-Elering customer portal]({portal_url}). History and entities are kept.",
         "data": {
           "client_id": "Client ID",
           "client_secret": "Client secret"
         },
         "data_description": {
-          "client_id": "The UUID shown for your API key in the Estfeed portal.",
+          "client_id": "The UUID shown for your API key in the e-Elering customer portal.",
           "client_secret": "Shown when the API key is created. Kept only in your Home Assistant configuration and sent only to Elering's login service."
         }
       }
     },
     "error": {
-      "invalid_auth": "Elering's login service rejected this client ID and secret. Check that you copied the whole secret, that the ID and secret are not swapped, and that the key is still active in the Estfeed portal. The Home Assistant log shows Elering's reason.",
+      "invalid_auth": "Elering's login service rejected this client ID and secret. Check that the key was created in the e-Elering customer portal (kliendiportaal.elering.ee), that you copied the whole secret, that the ID and secret are not swapped, and that the key is still active. The Home Assistant log shows Elering's reason.",
       "cannot_connect": "Could not reach the Estfeed API. Try again later.",
       "slug_in_use": "Another Estfeed installation already uses this name.",
       "already_configured": "This API key is already used by another Estfeed installation.",
-      "no_access": "Elering accepted the API key but refused access to metering data. Check in the Estfeed portal that the key is active and has access to your metering points. The Home Assistant log shows Elering's reason."
+      "no_access": "Elering accepted the API key but refused access to metering data. Check in the e-Elering customer portal that the key is active and has access to your metering points. The Home Assistant log shows Elering's reason.",
+      "datahub_key": "These are Estfeed Datahub technical-user credentials (from estfeed.elering.ee), which cannot read your meter data. Create an API key in the e-Elering customer portal (kliendiportaal.elering.ee) and use that instead."
     },
     "abort": {
       "already_configured": "This API key is already configured.",

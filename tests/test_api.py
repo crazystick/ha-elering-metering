@@ -23,7 +23,12 @@ from custom_components.estfeed.api import (
     MeteringPoint,
     Period,
 )
-from custom_components.estfeed.const import KEYCLOAK_TOKEN_URL, CommodityType, Resolution
+from custom_components.estfeed.const import (
+    DATAHUB_TOKEN_URL,
+    KEYCLOAK_TOKEN_URL,
+    CommodityType,
+    Resolution,
+)
 
 
 def test_metering_point_from_dict():
@@ -463,3 +468,16 @@ async def test_malformed_meter_response_raises_api_error(client, endpoint, respo
                 await client.list_metering_points(start, end)
             else:
                 await client.get_metering_data(start, end, Resolution.HOUR)
+
+
+@pytest.mark.parametrize(("status", "expected"), [(200, True), (401, False), (400, False)])
+async def test_datahub_technical_user_detection(client, status, expected):
+    with aioresponses() as mocked:
+        mocked.post(DATAHUB_TOKEN_URL, status=status, payload={"access_token": "t"})
+        assert await client.async_is_datahub_technical_user() is expected
+
+
+async def test_datahub_detection_treats_network_errors_as_no(client):
+    with aioresponses() as mocked:
+        mocked.post(DATAHUB_TOKEN_URL, exception=aiohttp.ClientConnectionError("down"))
+        assert await client.async_is_datahub_technical_user() is False

@@ -50,7 +50,14 @@ ROLLING_CACHE_DAYS: Final = 62
 DATA_FRESH_THRESHOLD: Final = timedelta(hours=30)
 
 API_BASE_URL: Final = "https://estfeed.elering.ee"
+# API keys for the customer API are created in the e-Elering customer portal
+# and log in through the "elering-sso" realm.
 KEYCLOAK_TOKEN_URL: Final = "https://kc.elering.ee/realms/elering-sso/protocol/openid-connect/token"
+CUSTOMER_PORTAL_URL: Final = "https://kliendiportaal.elering.ee/"
+# Estfeed Datahub "technical users" (created at estfeed.elering.ee for market
+# participants) log in through a different realm and cannot use the customer
+# API. Only used to tell users they created the wrong kind of key.
+DATAHUB_TOKEN_URL: Final = "https://kc.elering.ee/realms/estfeed/protocol/openid-connect/token"
 RATE_LIMIT_SECONDS: Final = 5.0
 TOKEN_REFRESH_MARGIN_SECONDS: Final = 30
 REQUEST_TIMEOUT_SECONDS: Final = 30
