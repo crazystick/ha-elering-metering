@@ -170,7 +170,7 @@ def test_parse_empty_means_no_periods(parse, text):
             "two periods start on 2026-12-01",
         ),
         ("- from: [", "not valid YAML"),
-        # Copilot review: non-finite numbers, impossible dates, non-string keys.
+        # Non-finite numbers, impossible dates, non-string keys.
         ("- from: 2026-12-01\n  fixed_price: .nan", "finite"),
         ("- from: 2026-12-01\n  fixed_price: 0.1\n  monthly_fee: .inf", "finite"),
         ("- from: 2026-02-30\n  fixed_price: 0.1", "invalid value"),
