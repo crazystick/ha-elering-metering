@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
@@ -235,6 +236,10 @@ def _parse_periods(text: str | None, keys: tuple[str, ...]) -> list[tuple[date, 
         data = yaml.safe_load(text)
     except yaml.YAMLError as err:
         raise TariffPeriodError(f"not valid YAML: {err}") from err
+    except ValueError as err:
+        # PyYAML builds dates while loading, so an impossible unquoted date
+        # such as 2026-02-30 raises ValueError rather than YAMLError.
+        raise TariffPeriodError(f"invalid value: {err}") from err
     if data is None:
         return []
     if not isinstance(data, list):
@@ -246,7 +251,8 @@ def _parse_periods(text: str | None, keys: tuple[str, ...]) -> list[tuple[date, 
             raise TariffPeriodError(f"period {index}: expected 'from:' and amounts")
         unknown = set(raw) - {"from", *keys}
         if unknown:
-            raise TariffPeriodError(f"period {index}: unknown key(s) {', '.join(sorted(unknown))}")
+            names = ", ".join(sorted(str(key) for key in unknown))
+            raise TariffPeriodError(f"period {index}: unknown key(s) {names}")
         if "from" not in raw:
             raise TariffPeriodError(f"period {index}: missing 'from'")
         amounts: dict[str, float] = {}
@@ -256,6 +262,8 @@ def _parse_periods(text: str | None, keys: tuple[str, ...]) -> list[tuple[date, 
             value = raw[key]
             if isinstance(value, bool) or not isinstance(value, int | float):
                 raise TariffPeriodError(f"period {index}: '{key}' must be a number")
+            if not math.isfinite(value):
+                raise TariffPeriodError(f"period {index}: '{key}' must be a finite number")
             amounts[key] = float(value)
         if amounts.get("monthly_fee", 0.0) < 0:
             raise TariffPeriodError(f"period {index}: 'monthly_fee' cannot be negative")

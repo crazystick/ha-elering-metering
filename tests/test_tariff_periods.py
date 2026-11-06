@@ -170,6 +170,12 @@ def test_parse_empty_means_no_periods(parse, text):
             "two periods start on 2026-12-01",
         ),
         ("- from: [", "not valid YAML"),
+        # Copilot review: non-finite numbers, impossible dates, non-string keys.
+        ("- from: 2026-12-01\n  fixed_price: .nan", "finite"),
+        ("- from: 2026-12-01\n  fixed_price: 0.1\n  monthly_fee: .inf", "finite"),
+        ("- from: 2026-02-30\n  fixed_price: 0.1", "invalid value"),
+        ("- from: 2026-12-01\n  fixed_price: 0.1\n  123: 0.1", "unknown key\\(s\\) 123"),
+        ("- from: 2026-12-01\n  fixed_price: 0.1\n  123: 0.1\n  abc: 1", "123, abc"),
     ],
 )
 def test_parse_supplier_rejects_bad_input(text, message):
@@ -183,6 +189,10 @@ def test_parse_supplier_rejects_bad_input(text, message):
         ("- from: 2026-06-01\n  spot_margin: 0.1", "unknown key"),
         ("- from: 2026-06-01\n  day: x", "must be a number"),
         ("- day: 0.1", "missing 'from'"),
+        ("- from: 2026-06-01\n  per_kwh: -.inf", "finite"),
+        ("- from: 2026-06-01\n  day: .nan", "finite"),
+        ("- from: 2026-13-01\n  day: 0.1", "invalid value"),
+        ("- from: 2026-06-01\n  1: 0.1\n  x: 2", "1, x"),
     ],
 )
 def test_parse_network_rejects_bad_input(text, message):
