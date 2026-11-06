@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from itertools import pairwise
@@ -17,9 +17,10 @@ from homeassistant.components.recorder.models import StatisticData
 from .api import AccountingInterval, interval_value
 from .const import (
     CONF_MARGIN_EUR_PER_KWH,
+    CONF_NETWORK_TARIFFS,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
-    CONF_TARIFF_PERIODS,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
     DEFAULT_MARGIN_EUR_PER_KWH,
@@ -162,38 +163,55 @@ def production_price(spot_eur_per_kwh: float, vat_percent: float, fee: float) ->
 
 
 class TariffPeriodError(ValueError):
-    """The tariff periods text could not be parsed or is invalid."""
+    """A tariff list could not be parsed or is invalid."""
 
 
 @dataclass(frozen=True, slots=True)
-class TariffPeriod:
-    """One consumption tariff, valid from ``start`` until the next period.
+class SupplierPeriod:
+    """The electricity seller's price, valid from ``start`` until the next period.
 
-    All amounts exclude VAT. ``fixed_price`` set means a fixed-price contract
-    (the spot price is ignored); otherwise the price is spot + ``spot_margin``.
-    ``day``/``night`` are per-kWh network charges added in the matching
-    hours; ``monthly_fee`` is spread evenly over the hours of each month.
+    Exactly one pricing mode is set: spot + ``spot_margin`` (the default),
+    ``fixed_price`` for every hour, or ``fixed_day``/``fixed_night`` split by
+    the network day/night hours. All amounts exclude VAT.
     """
 
     start: date
     spot_margin: float = 0.0
     fixed_price: float | None = None
-    day: float = 0.0
-    night: float = 0.0
+    fixed_day: float | None = None
+    fixed_night: float | None = None
     monthly_fee: float = 0.0
 
-    def same_tariff(self, other: TariffPeriod) -> bool:
-        """Equal apart from the start date."""
-        return (
-            self.spot_margin,
-            self.fixed_price,
-            self.day,
-            self.night,
-            self.monthly_fee,
-        ) == (other.spot_margin, other.fixed_price, other.day, other.night, other.monthly_fee)
+    def unit_price(self, day_hour: bool, spot: float | None) -> float | None:
+        """EUR/kWh excl. VAT for one hour, or None when the spot price is missing."""
+        if self.fixed_day is not None and self.fixed_night is not None:
+            return self.fixed_day if day_hour else self.fixed_night
+        if self.fixed_price is not None:
+            return self.fixed_price
+        return None if spot is None else spot + self.spot_margin
 
 
-_PERIOD_AMOUNT_KEYS = ("spot_margin", "fixed_price", "day", "night", "monthly_fee")
+@dataclass(frozen=True, slots=True)
+class NetworkPeriod:
+    """Network and state charges, valid from ``start`` until the next period.
+
+    ``day``/``night`` apply in the matching hours, ``per_kwh`` in every hour
+    (single-rate packages, excise, renewable and supply-security charges).
+    All amounts exclude VAT.
+    """
+
+    start: date
+    day: float = 0.0
+    night: float = 0.0
+    per_kwh: float = 0.0
+    monthly_fee: float = 0.0
+
+    def unit_price(self, day_hour: bool) -> float:
+        return (self.day if day_hour else self.night) + self.per_kwh
+
+
+_SUPPLIER_KEYS = ("spot_margin", "fixed_price", "fixed_day", "fixed_night", "monthly_fee")
+_NETWORK_KEYS = ("day", "night", "per_kwh", "monthly_fee")
 
 
 def _parse_date(value: Any, index: int) -> date:
@@ -209,38 +227,30 @@ def _parse_date(value: Any, index: int) -> date:
     raise TariffPeriodError(f"period {index}: 'from' must be a date like 2026-12-01")
 
 
-def parse_tariff_periods(text: str | None) -> tuple[TariffPeriod, ...]:
-    """Parse the YAML tariff-periods option into sorted periods.
-
-    Empty text means "no periods" (the plain margin applies throughout).
-    Raises ``TariffPeriodError`` with a user-facing message on bad input.
-    """
+def _parse_periods(text: str | None, keys: tuple[str, ...]) -> list[tuple[date, dict[str, float]]]:
+    """Shared YAML parsing: a list of ``{from: date, <amount keys>}`` mappings."""
     if text is None or not text.strip():
-        return ()
+        return []
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as err:
         raise TariffPeriodError(f"not valid YAML: {err}") from err
     if data is None:
-        return ()
+        return []
     if not isinstance(data, list):
         raise TariffPeriodError("expected a list of periods, each starting with '- from:'")
 
-    periods: list[TariffPeriod] = []
+    periods: list[tuple[date, dict[str, float]]] = []
     for index, raw in enumerate(data, start=1):
         if not isinstance(raw, dict):
             raise TariffPeriodError(f"period {index}: expected 'from:' and amounts")
-        unknown = set(raw) - {"from", *_PERIOD_AMOUNT_KEYS}
+        unknown = set(raw) - {"from", *keys}
         if unknown:
             raise TariffPeriodError(f"period {index}: unknown key(s) {', '.join(sorted(unknown))}")
         if "from" not in raw:
             raise TariffPeriodError(f"period {index}: missing 'from'")
-        if ("spot_margin" in raw) == ("fixed_price" in raw):
-            raise TariffPeriodError(
-                f"period {index}: set exactly one of 'spot_margin' or 'fixed_price'"
-            )
         amounts: dict[str, float] = {}
-        for key in _PERIOD_AMOUNT_KEYS:
+        for key in keys:
             if key not in raw:
                 continue
             value = raw[key]
@@ -249,43 +259,96 @@ def parse_tariff_periods(text: str | None) -> tuple[TariffPeriod, ...]:
             amounts[key] = float(value)
         if amounts.get("monthly_fee", 0.0) < 0:
             raise TariffPeriodError(f"period {index}: 'monthly_fee' cannot be negative")
-        periods.append(TariffPeriod(start=_parse_date(raw["from"], index), **amounts))
+        periods.append((_parse_date(raw["from"], index), amounts))
 
-    periods.sort(key=lambda p: p.start)
-    for prev, cur in pairwise(periods):
-        if prev.start == cur.start:
-            raise TariffPeriodError(f"two periods start on {cur.start.isoformat()}")
-    return tuple(periods)
+    periods.sort(key=lambda p: p[0])
+    for (prev, _), (cur, _) in pairwise(periods):
+        if prev == cur:
+            raise TariffPeriodError(f"two periods start on {cur.isoformat()}")
+    return periods
+
+
+def parse_supplier_periods(text: str | None) -> tuple[SupplierPeriod, ...]:
+    """Parse the supplier tariffs option (YAML list) into sorted periods."""
+    result: list[SupplierPeriod] = []
+    for index, (start, amounts) in enumerate(_parse_periods(text, _SUPPLIER_KEYS), start=1):
+        modes = [
+            "spot_margin" in amounts,
+            "fixed_price" in amounts,
+            "fixed_day" in amounts or "fixed_night" in amounts,
+        ]
+        if sum(modes) != 1:
+            raise TariffPeriodError(
+                f"period {index} ({start.isoformat()}): set exactly one of 'spot_margin', "
+                "'fixed_price', or 'fixed_day' with 'fixed_night'"
+            )
+        if ("fixed_day" in amounts) != ("fixed_night" in amounts):
+            raise TariffPeriodError(
+                f"period {index} ({start.isoformat()}): 'fixed_day' and 'fixed_night' go together"
+            )
+        result.append(SupplierPeriod(start=start, **amounts))
+    return tuple(result)
+
+
+def parse_network_periods(text: str | None) -> tuple[NetworkPeriod, ...]:
+    """Parse the network tariffs option (YAML list) into sorted periods."""
+    return tuple(
+        NetworkPeriod(start=start, **amounts)
+        for start, amounts in _parse_periods(text, _NETWORK_KEYS)
+    )
+
+
+def _period_on[P: (SupplierPeriod, NetworkPeriod)](periods: tuple[P, ...], day: date) -> P | None:
+    """The period in force on a local day (latest start on or before it)."""
+    current: P | None = None
+    for period in periods:
+        if period.start > day:
+            break
+        current = period
+    return current
+
+
+_NO_NETWORK = NetworkPeriod(start=date.min)
+
+
+def _same_supplier(a: SupplierPeriod, b: SupplierPeriod) -> bool:
+    """Same prices, ignoring the start date."""
+    return replace(a, start=date.min) == replace(b, start=date.min)
+
+
+def _same_network(a: NetworkPeriod | None, b: NetworkPeriod | None) -> bool:
+    """Same charges, ignoring the start date; no period means no charges."""
+    return replace(a or _NO_NETWORK, start=date.min) == replace(b or _NO_NETWORK, start=date.min)
 
 
 @dataclass(frozen=True, slots=True)
 class CostModel:
-    """Prices one hour of consumption under dated tariff periods, incl. VAT."""
+    """Prices one hour of consumption from supplier and network tariffs, incl. VAT."""
 
-    periods: tuple[TariffPeriod, ...]
+    supplier: tuple[SupplierPeriod, ...]
+    network: tuple[NetworkPeriod, ...]
     vat_at: Callable[[datetime], float] = field(compare=False)
 
-    def period_at(self, hour: datetime) -> TariffPeriod:
-        return self.period_on(hour.astimezone(_ESTONIA_TZ).date())
+    def supplier_on(self, local_day: date) -> SupplierPeriod:
+        period = _period_on(self.supplier, local_day)
+        return period if period is not None else self.supplier[0]
 
-    def period_on(self, local_day: date) -> TariffPeriod:
-        current = self.periods[0]
-        for period in self.periods:
-            if period.start > local_day:
-                break
-            current = period
-        return current
+    def network_on(self, local_day: date) -> NetworkPeriod | None:
+        return _period_on(self.network, local_day)
 
     def hour_cost(self, hour: datetime, energy_kwh: float, spot: float | None) -> float | None:
-        period = self.period_at(hour)
-        if period.fixed_price is not None:
-            unit = period.fixed_price
-        elif spot is None:
+        local_day = hour.astimezone(_ESTONIA_TZ).date()
+        day_hour = is_network_day_hour(hour)
+        supplier = self.supplier_on(local_day)
+        unit = supplier.unit_price(day_hour, spot)
+        if unit is None:
             return None
-        else:
-            unit = spot + period.spot_margin
-        unit += period.day if is_network_day_hour(hour) else period.night
-        fee = period.monthly_fee / hours_in_local_month(hour) if period.monthly_fee else 0.0
+        fees = supplier.monthly_fee
+        network = self.network_on(local_day)
+        if network is not None:
+            unit += network.unit_price(day_hour)
+            fees += network.monthly_fee
+        fee = fees / hours_in_local_month(hour) if fees else 0.0
         return (energy_kwh * unit + fee) * (1 + self.vat_at(hour) / 100)
 
 
@@ -298,7 +361,8 @@ class PricingConfig:
     margin_eur_per_kwh: float = DEFAULT_MARGIN_EUR_PER_KWH
     production_vat: bool = DEFAULT_PRODUCTION_VAT
     production_fee_eur_per_kwh: float = DEFAULT_PRODUCTION_FEE_EUR_PER_KWH
-    tariff_periods: tuple[TariffPeriod, ...] = ()
+    supplier_periods: tuple[SupplierPeriod, ...] = ()
+    network_periods: tuple[NetworkPeriod, ...] = ()
 
     @classmethod
     def from_options(cls, options: Mapping[str, Any]) -> Self:
@@ -312,7 +376,8 @@ class PricingConfig:
             production_fee_eur_per_kwh=float(
                 options.get(CONF_PRODUCTION_FEE_EUR_PER_KWH, DEFAULT_PRODUCTION_FEE_EUR_PER_KWH)
             ),
-            tariff_periods=parse_tariff_periods(options.get(CONF_TARIFF_PERIODS)),
+            supplier_periods=parse_supplier_periods(options.get(CONF_SUPPLIER_TARIFFS)),
+            network_periods=parse_network_periods(options.get(CONF_NETWORK_TARIFFS)),
         )
 
     def vat_at(self, at: datetime) -> float:
@@ -321,23 +386,25 @@ class PricingConfig:
             return self.vat_percent
         return estonia_vat_percent(at)
 
-    def effective_periods(self) -> tuple[TariffPeriod, ...]:
-        """Consumption tariffs over all time.
+    def cost_model(self) -> CostModel:
+        """Consumption cost model over all time.
 
-        The plain margin applies from the beginning of history; configured
-        periods override it from their start dates.
+        The plain margin applies from the beginning of history; supplier
+        periods override it from their start dates. Without network periods
+        no network charges are added.
         """
-        base = TariffPeriod(start=date.min, spot_margin=self.margin_eur_per_kwh)
-        return (base, *(p for p in self.tariff_periods if p.start > date.min))
+        base = SupplierPeriod(start=date.min, spot_margin=self.margin_eur_per_kwh)
+        supplier = (base, *(p for p in self.supplier_periods if p.start > date.min))
+        return CostModel(supplier, self.network_periods, self.vat_at)
 
     def cost_for(self, kind: Kind) -> Tariff | CostModel:
         """Pricer for a cost (consumption) or compensation (production) stream.
 
-        Consumption with tariff periods returns a ``CostModel`` (fixed prices,
-        day/night charges, monthly fees); otherwise the per-kWh ``Tariff``.
+        Consumption with supplier or network tariffs returns a ``CostModel``;
+        otherwise (and always for production) the per-kWh ``Tariff``.
         """
-        if kind == Kind.CONSUMPTION and self.tariff_periods:
-            return CostModel(self.effective_periods(), self.vat_at)
+        if kind == Kind.CONSUMPTION and (self.supplier_periods or self.network_periods):
+            return self.cost_model()
         return self.tariff_for(kind)
 
     def rebuild_from(self, previous: PricingConfig) -> date | None:
@@ -359,13 +426,15 @@ class PricingConfig:
             previous.production_fee_eur_per_kwh,
         ):
             return date.min
-        new, old = (
-            CostModel(self.effective_periods(), self.vat_at),
-            CostModel(previous.effective_periods(), previous.vat_at),
-        )
-        boundaries = sorted({p.start for p in (*new.periods, *old.periods)})
+        new, old = self.cost_model(), previous.cost_model()
+        starts = {date.min}
+        for model in (new, old):
+            starts |= {p.start for p in model.supplier} | {p.start for p in model.network}
+        boundaries = sorted(starts)
         for day in boundaries:
-            if not new.period_on(day).same_tariff(old.period_on(day)):
+            if not _same_supplier(new.supplier_on(day), old.supplier_on(day)):
+                return day
+            if not _same_network(new.network_on(day), old.network_on(day)):
                 return day
         return None
 

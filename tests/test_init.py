@@ -22,7 +22,7 @@ from custom_components.estfeed.const import (
     CONF_MARGIN_EUR_PER_KWH,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
-    CONF_TARIFF_PERIODS,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
     DOMAIN,
@@ -146,7 +146,7 @@ async def test_migration_leaves_current_entries_untouched(hass):
             {CONF_MARGIN_EUR_PER_KWH: 0.01},
             {
                 CONF_MARGIN_EUR_PER_KWH: 0.01,
-                CONF_TARIFF_PERIODS: "- from: 2026-12-01\n  fixed_price: 0.15\n",
+                CONF_SUPPLIER_TARIFFS: "- from: 2026-12-01\n  fixed_price: 0.15\n",
             },
             datetime(2026, 11, 30, 22, tzinfo=UTC),  # 00:00 Tallinn
         ),
@@ -174,7 +174,7 @@ async def test_options_update_with_equivalent_periods_does_not_rebuild(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
-        options={CONF_TARIFF_PERIODS: "# just a comment\n", CONF_MARGIN_EUR_PER_KWH: 0.01},
+        options={CONF_SUPPLIER_TARIFFS: "# just a comment\n", CONF_MARGIN_EUR_PER_KWH: 0.01},
     )
     entry.add_to_hass(hass)
     coordinator = MagicMock()

@@ -22,9 +22,10 @@ from custom_components.estfeed.const import (
     CONF_CLIENT_SECRET,
     CONF_FRIENDLY_NAME,
     CONF_MARGIN_EUR_PER_KWH,
+    CONF_NETWORK_TARIFFS,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
-    CONF_TARIFF_PERIODS,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
     DEFAULT_MARGIN_EUR_PER_KWH,
@@ -428,7 +429,8 @@ async def test_options_flow_defaults_to_estonian_vat_and_zero_margin(hass):
     assert rendered[CONF_VAT_PERCENT] == DEFAULT_VAT_PERCENT
     assert rendered[CONF_MARGIN_EUR_PER_KWH] == DEFAULT_MARGIN_EUR_PER_KWH
     # Tariff periods are optional and shown empty (suggested value, no default).
-    assert CONF_TARIFF_PERIODS not in rendered
+    assert CONF_SUPPLIER_TARIFFS not in rendered
+    assert CONF_NETWORK_TARIFFS not in rendered
 
 
 async def _open_options(hass):
@@ -448,32 +450,44 @@ _BASE_SUBMISSION = {"resolution": "one_hour", "backfill_months": 12, CONF_VAT_PE
 
 
 @pytest.mark.asyncio
-async def test_options_flow_stores_tariff_periods(hass):
+async def test_options_flow_stores_supplier_and_network_tariffs(hass):
     entry, result = await _open_options(hass)
-    periods = "- from: 2026-12-01\n  fixed_price: 0.149\n  monthly_fee: 20.64\n"
+    supplier = "- from: 2026-12-01\n  fixed_day: 0.1121\n  fixed_night: 0.096\n"
+    network = "- from: 2026-06-01\n  day: 0.0369\n  night: 0.021\n  monthly_fee: 20.64\n"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**_BASE_SUBMISSION, CONF_TARIFF_PERIODS: periods}
+        result["flow_id"],
+        {**_BASE_SUBMISSION, CONF_SUPPLIER_TARIFFS: supplier, CONF_NETWORK_TARIFFS: network},
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert entry.options[CONF_TARIFF_PERIODS] == periods.strip()
+    assert entry.options[CONF_SUPPLIER_TARIFFS] == supplier.strip()
+    assert entry.options[CONF_NETWORK_TARIFFS] == network.strip()
 
 
 @pytest.mark.asyncio
-async def test_options_flow_without_periods_stores_empty_text(hass):
+async def test_options_flow_without_tariffs_stores_empty_text(hass):
     entry, result = await _open_options(hass)
     result = await hass.config_entries.options.async_configure(result["flow_id"], _BASE_SUBMISSION)
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert entry.options[CONF_TARIFF_PERIODS] == ""
+    assert entry.options[CONF_SUPPLIER_TARIFFS] == ""
+    assert entry.options[CONF_NETWORK_TARIFFS] == ""
 
 
 @pytest.mark.asyncio
-async def test_options_flow_rejects_bad_tariff_periods(hass):
+async def test_options_flow_reports_errors_per_field(hass):
     entry, result = await _open_options(hass)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {**_BASE_SUBMISSION, CONF_TARIFF_PERIODS: "- from: 2026-12-01\n  fixed: 0.1\n"},
+        {
+            **_BASE_SUBMISSION,
+            CONF_SUPPLIER_TARIFFS: "- from: 2026-12-01\n  fixed_day: 0.1\n",
+            CONF_NETWORK_TARIFFS: "- from: 2026-06-01\n  fixed_price: 0.1\n",
+        },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TARIFF_PERIODS: "invalid_tariff_periods"}
-    assert "unknown key" in result["description_placeholders"]["error"]
-    assert CONF_TARIFF_PERIODS not in entry.options
+    assert result["errors"] == {
+        CONF_SUPPLIER_TARIFFS: "invalid_supplier_tariffs",
+        CONF_NETWORK_TARIFFS: "invalid_network_tariffs",
+    }
+    assert "go together" in result["description_placeholders"]["supplier_error"]
+    assert "unknown key" in result["description_placeholders"]["network_error"]
+    assert CONF_SUPPLIER_TARIFFS not in entry.options

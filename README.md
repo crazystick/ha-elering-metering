@@ -81,39 +81,59 @@ With the default Estonian VAT setting, each hour uses the rate in force on that 
 | 1 January 2024 | 22% |
 | 1 July 2025 | 24% |
 
-Without tariff periods, the cost statistics are a close estimate of the **energy** part of your bill. Network fees, the renewable energy charge, excise duty and monthly fees are only included if you add them as a flat amount to the margin. Gas has no cost statistic.
+Without the tariff lists below, the cost statistics are a close estimate of the **energy** part of your bill. Network fees, the renewable energy charge, excise duty and monthly fees are only included if you add them as a flat amount to the margin. Gas has no cost statistic.
 
-### Tariff periods (fixed prices, day/night network fees, monthly fees)
+### Supplier and network tariffs (fixed prices, day/night rates, monthly fees)
 
-For a bill-accurate cost, or when you switch between spot and fixed-price contracts, set **Tariff periods** in the integration's options. It is a YAML list. Each period applies from its `from` date (Estonian time) until the next period starts. Before the first period, the plain margin applies.
+For a bill-accurate cost, or when you switch between spot and fixed-price contracts, set **Supplier tariffs** and **Network tariffs** in the integration's options. Each is a YAML list of dated periods. A period applies from its `from` date (Estonian time) until the next period in the same list starts, so seller and network prices can change independently. Both lists are optional.
+
+**Supplier tariffs** — your electricity seller. Before the first period, the plain margin applies.
 
 ```yaml
 - from: 2025-07-01
-  spot_margin: 0.0207   # spot price + this (seller margin, excise, renewable and security charges)
-  day: 0.0369           # network day rate
-  night: 0.0210         # network night rate
-  monthly_fee: 20.64    # network connection fee
-- from: 2026-12-01      # winter fixed-price contract
-  fixed_price: 0.1490
+  spot_margin: 0.0092      # spot price + seller margin and balancing
+- from: 2026-12-01         # fixed-price contract with day/night energy prices
+  fixed_day: 0.1121
+  fixed_night: 0.0960
+  monthly_fee: 1.61
+- from: 2027-12-01         # single-rate fixed price
+  fixed_price: 0.1050
+  monthly_fee: 1.63
+```
+
+| Key | Meaning |
+| --- | --- |
+| `from` | First day of the period, `YYYY-MM-DD`. |
+| `spot_margin`, `fixed_price`, or `fixed_day` + `fixed_night` | Exactly one. `spot_margin` is added to the hourly spot price; `fixed_price` replaces it in every hour; `fixed_day`/`fixed_night` replace it in day and night hours. |
+| `monthly_fee` | Optional EUR per month. |
+
+**Network tariffs** — network operator and state charges. Before the first period, none are added.
+
+```yaml
+- from: 2026-06-01         # Elektrilevi Võrk 4
   day: 0.0369
   night: 0.0210
+  per_kwh: 0.0181          # excise + renewable energy + supply security charges
   monthly_fee: 20.64
 ```
 
 | Key | Meaning |
 | --- | --- |
 | `from` | First day of the period, `YYYY-MM-DD`. |
-| `spot_margin` *or* `fixed_price` | Exactly one. `spot_margin` is added to the hourly spot price; `fixed_price` replaces it. |
-| `day`, `night` | Optional per-kWh charges. *Day* is Monday to Friday 07:00–22:00 Estonian time, except public holidays; *night* is every other hour. This matches Elektrilevi's day/night packages. |
-| `monthly_fee` | Optional EUR per month, spread evenly over the hours of the month (so daily and weekly costs include their share). |
+| `day`, `night` | Per-kWh charges in day and night hours. |
+| `per_kwh` | Per-kWh charge in every hour (single-rate packages, state charges). |
+| `monthly_fee` | EUR per month. |
 
-All amounts are in EUR **excluding VAT**; VAT is added per day as above:
+All amounts are in EUR **excluding VAT**. *Day* is Monday to Friday 07:00–22:00 Estonian time, except public holidays; *night* is every other hour. This is how Elektrilevi meters day and night, so sellers' day/night prices follow the same hours. Monthly fees are spread evenly over the hours of the month, so daily and weekly costs include their share.
 
 ```text
-Cost of an hour = (kWh × (energy price + day or night charge) + monthly fee ÷ hours in month) × (1 + VAT)
+Cost of an hour = (kWh × (supplier price + network day/night + per_kwh)
+                   + (supplier fee + network fee) ÷ hours in month) × (1 + VAT)
 ```
 
-Tariff periods only affect consumption cost, not production compensation. When you change them, costs are recalculated only from the first day whose price changed, so adding a new contract leaves earlier history as it was.
+If you don't need the split, leave the supplier list empty and put your whole per-kWh add-on (seller margin plus network and state charges) in the network `per_kwh`.
+
+The tariffs only affect consumption cost, not production compensation. When you change them, costs are recalculated only from the first day whose price changed, so adding a new contract leaves earlier history as it was.
 
 ## Entities
 
@@ -156,7 +176,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 | *Elering rejected the client ID or client secret* | Copy both values again from the Estfeed portal. Make sure the key is still active. |
 | Sensors show *unavailable* right after setup | Wait for the background import to finish. The first readings can take a few minutes to appear. |
 | *Data fresh* is off | Estfeed has not published new readings for over 30 hours. This is usually a delay at the network operator. |
-| Costs look wrong | Check the margin and tariff periods are entered **excluding VAT** and in EUR (not cents). Then download diagnostics from the integration page to compare cached prices. |
+| Costs look wrong | Check the margin and tariffs are entered **excluding VAT** and in EUR (not cents). Then download diagnostics from the integration page to compare cached prices. |
 
 ## Development
 
