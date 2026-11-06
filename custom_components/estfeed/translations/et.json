@@ -84,7 +84,8 @@
           "production_vat": "Lisa tootmise hüvitisele käibemaks",
           "production_fee_eur_per_kwh": "Ostja poolt kinni peetav tootmistasu (km-ta)",
           "backfill_months": "Imporditav ajalugu (kuud)",
-          "resolution": "Andmete täpsus"
+          "resolution": "Andmete täpsus",
+          "tariff_periods": "Tariifiperioodid (täpsem)"
         },
         "data_description": {
           "vat_mode": "Eesti graafik rakendab igal päeval kehtinud määra (kuni 2023 20%, 2024 – juuni 2025 22%, alates 1. juulist 2025 24%), nii et imporditud ajalugu hinnastatakse õigesti.",
@@ -93,9 +94,13 @@
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Kulude ümberarvutamise aken. Pikema ajaloo importimiseks kasuta ajaloo laadimise toimingut.",
-          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine."
+          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine.",
+          "tariff_periods": "Valikuline: kuupäevaga tariifid, fikseeritud hinnaga lepingud, päeva/öö võrgutasud ja kuutasud. YAML-loend; iga periood kehtib alates `from` kuupäevast (Eesti aeg) kuni järgmiseni, enne esimest kehtib ülal olev marginaal. Igal perioodil peab olema täpselt üks väljadest `spot_margin` (lisandub börsihinnale) või `fixed_price`; valikulised `day` ja `night` on tasud kWh kohta (päev = E–R 7–22, v.a riigipühad) ning `monthly_fee` jaotatakse ühtlaselt kuu tundidele. Kõik summad eurodes ilma käibemaksuta. Näide:\n```\n- from: 2026-12-01\n  fixed_price: 0.149\n  day: 0.0369\n  night: 0.021\n  monthly_fee: 20.64\n```\nÜmber arvutatakse ainult kulud alates esimesest muutunud päevast."
         }
       }
+    },
+    "error": {
+      "invalid_tariff_periods": "Tariifiperioodid: {error}"
     }
   },
   "selector": {

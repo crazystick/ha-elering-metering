@@ -81,7 +81,39 @@ With the default Estonian VAT setting, each hour uses the rate in force on that 
 | 1 January 2024 | 22% |
 | 1 July 2025 | 24% |
 
-The cost statistics are a close estimate of the **energy** part of your bill. They do not include network fees with day/night tariffs, the renewable energy charge, excise duty or monthly fixed fees, unless you add them as a flat amount to the margin. Gas has no cost statistic.
+Without tariff periods, the cost statistics are a close estimate of the **energy** part of your bill. Network fees, the renewable energy charge, excise duty and monthly fees are only included if you add them as a flat amount to the margin. Gas has no cost statistic.
+
+### Tariff periods (fixed prices, day/night network fees, monthly fees)
+
+For a bill-accurate cost, or when you switch between spot and fixed-price contracts, set **Tariff periods** in the integration's options. It is a YAML list. Each period applies from its `from` date (Estonian time) until the next period starts. Before the first period, the plain margin applies.
+
+```yaml
+- from: 2025-07-01
+  spot_margin: 0.0207   # spot price + this (seller margin, excise, renewable and security charges)
+  day: 0.0369           # network day rate
+  night: 0.0210         # network night rate
+  monthly_fee: 20.64    # network connection fee
+- from: 2026-12-01      # winter fixed-price contract
+  fixed_price: 0.1490
+  day: 0.0369
+  night: 0.0210
+  monthly_fee: 20.64
+```
+
+| Key | Meaning |
+| --- | --- |
+| `from` | First day of the period, `YYYY-MM-DD`. |
+| `spot_margin` *or* `fixed_price` | Exactly one. `spot_margin` is added to the hourly spot price; `fixed_price` replaces it. |
+| `day`, `night` | Optional per-kWh charges. *Day* is Monday to Friday 07:00–22:00 Estonian time, except public holidays; *night* is every other hour. This matches Elektrilevi's day/night packages. |
+| `monthly_fee` | Optional EUR per month, spread evenly over the hours of the month (so daily and weekly costs include their share). |
+
+All amounts are in EUR **excluding VAT**; VAT is added per day as above:
+
+```text
+Cost of an hour = (kWh × (energy price + day or night charge) + monthly fee ÷ hours in month) × (1 + VAT)
+```
+
+Tariff periods only affect consumption cost, not production compensation. When you change them, costs are recalculated only from the first day whose price changed, so adding a new contract leaves earlier history as it was.
 
 ## Entities
 
@@ -124,7 +156,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 | *Elering rejected the client ID or client secret* | Copy both values again from the Estfeed portal. Make sure the key is still active. |
 | Sensors show *unavailable* right after setup | Wait for the background import to finish. The first readings can take a few minutes to appear. |
 | *Data fresh* is off | Estfeed has not published new readings for over 30 hours. This is usually a delay at the network operator. |
-| Costs look wrong | Check the margin is entered **excluding VAT** and in EUR (not cents). Then download diagnostics from the integration page to compare cached prices. |
+| Costs look wrong | Check the margin and tariff periods are entered **excluding VAT** and in EUR (not cents). Then download diagnostics from the integration page to compare cached prices. |
 
 ## Development
 

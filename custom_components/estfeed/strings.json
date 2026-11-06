@@ -84,7 +84,8 @@
           "production_vat": "Add VAT to production compensation",
           "production_fee_eur_per_kwh": "Production fee deducted by the buyer (excl. VAT)",
           "backfill_months": "History to import (months)",
-          "resolution": "Data resolution"
+          "resolution": "Data resolution",
+          "tariff_periods": "Tariff periods (advanced)"
         },
         "data_description": {
           "vat_mode": "The Estonian schedule applies the rate in force on each day (20% until 2023, 22% in 2024 – June 2025, 24% from 1 July 2025), so imported history is priced correctly.",
@@ -93,9 +94,13 @@
           "production_vat": "Leave off unless you are VAT-registered and your electricity buyer pays you VAT on sold energy. Most households are not.",
           "production_fee_eur_per_kwh": "Subtracted from the spot price for energy you sell to the grid. Example: 0.0030 EUR/kWh = 0.3 cents/kWh.",
           "backfill_months": "Window used when recalculating costs. Use the backfill action to import more history.",
-          "resolution": "Hourly is recommended. 15-minute data makes more API calls; statistics are always hourly."
+          "resolution": "Hourly is recommended. 15-minute data makes more API calls; statistics are always hourly.",
+          "tariff_periods": "Optional, for dated tariffs, fixed-price contracts, day/night network rates and monthly fees. A YAML list; each period applies from its `from` date (Estonian time) until the next one, and the margin above applies before the first. Each period needs exactly one of `spot_margin` (added to spot) or `fixed_price`; optional `day` and `night` are per-kWh charges (day = Mon–Fri 07–22 except public holidays), and `monthly_fee` is spread evenly over the month's hours. All amounts in EUR excl. VAT. Example:\n```\n- from: 2026-12-01\n  fixed_price: 0.149\n  day: 0.0369\n  night: 0.021\n  monthly_fee: 20.64\n```\nOnly costs from the first changed day are recalculated."
         }
       }
+    },
+    "error": {
+      "invalid_tariff_periods": "Tariff periods: {error}"
     }
   },
   "selector": {

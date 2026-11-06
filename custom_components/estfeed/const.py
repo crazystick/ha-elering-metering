@@ -26,6 +26,8 @@ CONF_VAT_PERCENT: Final = "vat_percent"
 CONF_MARGIN_EUR_PER_KWH: Final = "margin_eur_per_kwh"
 CONF_PRODUCTION_VAT: Final = "production_vat"
 CONF_PRODUCTION_FEE_EUR_PER_KWH: Final = "production_fee_eur_per_kwh"
+# Optional YAML list of dated consumption tariffs (see pricing.parse_tariff_periods).
+CONF_TARIFF_PERIODS: Final = "tariff_periods"
 
 VAT_MODE_ESTONIA: Final = "estonia"
 VAT_MODE_CUSTOM: Final = "custom"
@@ -35,6 +37,7 @@ DEFAULT_VAT_PERCENT: Final = 24.0
 DEFAULT_MARGIN_EUR_PER_KWH: Final = 0.0
 DEFAULT_PRODUCTION_VAT: Final = False
 DEFAULT_PRODUCTION_FEE_EUR_PER_KWH: Final = 0.0
+DEFAULT_TARIFF_PERIODS: Final = ""
 
 # Changing any of these rebuilds the cost/compensation statistics.
 PRICING_OPTION_KEYS: Final = (
@@ -43,6 +46,7 @@ PRICING_OPTION_KEYS: Final = (
     CONF_MARGIN_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
+    CONF_TARIFF_PERIODS,
 )
 
 UPDATE_INTERVAL: Final = timedelta(hours=1)
