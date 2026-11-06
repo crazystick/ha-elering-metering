@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import voluptuous as vol
 from homeassistant.components.recorder.statistics import get_last_statistics
@@ -40,6 +40,7 @@ from .const import (
 )
 from .coordinator import EstfeedCoordinator
 from .nps import EleringNpsClient
+from .pricing import PricingConfig, local_midnight
 from .utils import slugify
 
 _LOGGER = logging.getLogger(__name__)
@@ -196,8 +197,16 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     coordinator.options = new_options
 
     if any(old_options.get(key) != new_options.get(key) for key in PRICING_OPTION_KEYS):
+        # Only recompute from the first day whose price actually changed, so
+        # adding a tariff period never rewrites the history before it.
+        changed_from = PricingConfig.from_options(new_options).rebuild_from(
+            PricingConfig.from_options(old_options)
+        )
+        if changed_from is None:
+            return
+        since = None if changed_from == date.min else local_midnight(changed_from)
         hass.async_create_background_task(
-            coordinator.async_rebuild_cost(), name=f"{DOMAIN}_cost_rebuild"
+            coordinator.async_rebuild_cost(since), name=f"{DOMAIN}_cost_rebuild"
         )
 
 

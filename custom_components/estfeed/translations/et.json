@@ -29,7 +29,7 @@
         "data_description": {
           "vat_mode": "Eesti graafik rakendab igal päeval kehtinud määra (kuni 2023 20%, 2024 – juuni 2025 22%, alates 1. juulist 2025 24%), nii et imporditud ajalugu hinnastatakse õigesti.",
           "vat_percent": "Kasutatakse ainult siis, kui käibemaksumääraks on valitud kohandatud väärtus.",
-          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Siia võib lisada ka võrgutasu, kui see on fikseeritud kWh-hind. Negatiivne väärtus on lubatud.",
+          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Negatiivne väärtus on lubatud. Võrgutasude, fikseeritud hinna või päeva/öö hindade jaoks lisa pärast seadistamist menüüs **Seadista** müüja ja võrgu tariifid.",
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Imporditakse taustal pärast seadistamist (1–84 kuud, igaüks 30 päeva)."
@@ -76,7 +76,7 @@
     "step": {
       "init": {
         "title": "Estfeedi seaded",
-        "description": "**Kulu** = (börsihind + marginaal) × (1 + km)\n**Hüvitis** = (börsihind − tootmistasu) × (1 + km, kui lubatud)\n\nHinnaseadete muutmisel arvutatakse ajalooakna kulustatistika taustal ümber.",
+        "description": "**Kulu** = (börsihind + marginaal) × (1 + km) või allolevate müüja ja võrgu tariifide järgi, kui need on määratud\n**Hüvitis** = (börsihind − tootmistasu) × (1 + km, kui lubatud)\n\nHinnaseadete muutmisel arvutatakse kulustatistika taustal ümber alates esimesest päevast, mille hind muutus.",
         "data": {
           "vat_mode": "Käibemaksumäär",
           "vat_percent": "Kohandatud käibemaksumäär",
@@ -84,18 +84,26 @@
           "production_vat": "Lisa tootmise hüvitisele käibemaks",
           "production_fee_eur_per_kwh": "Ostja poolt kinni peetav tootmistasu (km-ta)",
           "backfill_months": "Imporditav ajalugu (kuud)",
-          "resolution": "Andmete täpsus"
+          "resolution": "Andmete täpsus",
+          "supplier_tariffs": "Müüja tariifid (täpsem)",
+          "network_tariffs": "Võrgutariifid (täpsem)"
         },
         "data_description": {
           "vat_mode": "Eesti graafik rakendab igal päeval kehtinud määra (kuni 2023 20%, 2024 – juuni 2025 22%, alates 1. juulist 2025 24%), nii et imporditud ajalugu hinnastatakse õigesti.",
           "vat_percent": "Kasutatakse ainult siis, kui käibemaksumääraks on valitud kohandatud väärtus.",
-          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Siia võib lisada ka võrgutasu, kui see on fikseeritud kWh-hind. Negatiivne väärtus on lubatud.",
+          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Negatiivne väärtus on lubatud. Kehtib kuni esimese müüja tariifini, kui see on määratud.",
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Kulude ümberarvutamise aken. Pikema ajaloo importimiseks kasuta ajaloo laadimise toimingut.",
-          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine."
+          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine.",
+          "supplier_tariffs": "Valikuline YAML-loend müüja hindadest, iga periood alates `from` kuupäevast. Perioodil: `spot_margin`, `fixed_price` või `fixed_day` + `fixed_night`, lisaks valikuline `monthly_fee`. Eurodes ilma käibemaksuta. [Vorming ja näited](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)",
+          "network_tariffs": "Valikuline YAML-loend võrgu- ja riiklikest tasudest: `day`, `night`, `per_kwh`, `monthly_fee`. Päev = E–R 7–22, v.a riigipühad. Eurodes ilma käibemaksuta. [Vorming ja näited](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)"
         }
       }
+    },
+    "error": {
+      "invalid_supplier_tariffs": "Müüja tariifid: {supplier_error}",
+      "invalid_network_tariffs": "Võrgutariifid: {network_error}"
     }
   },
   "selector": {

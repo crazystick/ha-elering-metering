@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 
 from .api import AccountingInterval, interval_value
 from .const import DOMAIN, Kind
-from .pricing import Tariff, compute_cost_rows, compute_cost_rows_from_hourly
+from .pricing import CostModel, Tariff, compute_cost_rows, compute_cost_rows_from_hourly
 
 # HA 2026.11 will require `mean_type` in StatisticMetaData; older HA versions
 # don't expose StatisticMeanType. Detect at import time and only set the field
@@ -173,7 +173,7 @@ async def async_write_cost_statistics(
     stream: CostStream,
     intervals: list[AccountingInterval],
     prices: dict[datetime, float],
-    tariff: Tariff,
+    tariff: Tariff | CostModel,
     prior_sum: float,
 ) -> float:
     """Compute cost rows from raw intervals for one meter+kind and publish them.
@@ -193,7 +193,7 @@ async def async_write_cost_statistics_from_hourly(
     stream: CostStream,
     hourly_energy: dict[datetime, float],
     prices: dict[datetime, float],
-    tariff: Tariff,
+    tariff: Tariff | CostModel,
     prior_sum: float,
 ) -> float:
     """Publish cost rows derived from a per-hour energy map.

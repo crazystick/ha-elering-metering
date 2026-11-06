@@ -35,9 +35,11 @@ from .const import (
     CONF_CLIENT_SECRET,
     CONF_FRIENDLY_NAME,
     CONF_MARGIN_EUR_PER_KWH,
+    CONF_NETWORK_TARIFFS,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
     CONF_RESOLUTION,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
     DEFAULT_BACKFILL_MONTHS,
@@ -45,6 +47,7 @@ from .const import (
     DEFAULT_MARGIN_EUR_PER_KWH,
     DEFAULT_PRODUCTION_FEE_EUR_PER_KWH,
     DEFAULT_PRODUCTION_VAT,
+    DEFAULT_TARIFFS,
     DEFAULT_VAT_MODE,
     DEFAULT_VAT_PERCENT,
     DOMAIN,
@@ -54,12 +57,14 @@ from .const import (
     VAT_MODE_ESTONIA,
     Resolution,
 )
+from .pricing import TariffPeriodError, parse_network_periods, parse_supplier_periods
 from .utils import slugify
 
 ESTFEED_PORTAL_URL = "https://estfeed.elering.ee/"
 
 _TEXT = TextSelector()
 _PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+_MULTILINE = TextSelector(TextSelectorConfig(multiline=True))
 
 
 def _eur_per_kwh(minimum: float, maximum: float) -> NumberSelector:
@@ -141,6 +146,13 @@ def _pricing_schema(current: Mapping[str, Any], *, include_resolution: bool) -> 
         ),
     }
     if include_resolution:
+        # Advanced, options-only: dated supplier and network tariffs.
+        for key in (CONF_SUPPLIER_TARIFFS, CONF_NETWORK_TARIFFS):
+            fields[
+                vol.Optional(
+                    key, description={"suggested_value": current.get(key, DEFAULT_TARIFFS)}
+                )
+            ] = _MULTILINE
         fields[
             vol.Required(
                 CONF_RESOLUTION,
@@ -156,7 +168,9 @@ def _pricing_schema(current: Mapping[str, Any], *, include_resolution: bool) -> 
     return vol.Schema(fields)
 
 
-def _normalize_pricing(user_input: Mapping[str, Any]) -> dict[str, Any]:
+def _normalize_pricing(
+    user_input: Mapping[str, Any], *, include_periods: bool = False
+) -> dict[str, Any]:
     """Coerce selector output (floats from number boxes) into stored types."""
     data = dict(user_input)
     data[CONF_VAT_PERCENT] = float(data[CONF_VAT_PERCENT])
@@ -164,6 +178,9 @@ def _normalize_pricing(user_input: Mapping[str, Any]) -> dict[str, Any]:
     data[CONF_PRODUCTION_FEE_EUR_PER_KWH] = float(data[CONF_PRODUCTION_FEE_EUR_PER_KWH])
     data[CONF_PRODUCTION_VAT] = bool(data[CONF_PRODUCTION_VAT])
     data[CONF_BACKFILL_MONTHS] = int(data[CONF_BACKFILL_MONTHS])
+    for key in (CONF_SUPPLIER_TARIFFS, CONF_NETWORK_TARIFFS):
+        if key in data or include_periods:
+            data[key] = str(data.get(key) or "").strip()
     return data
 
 
@@ -333,10 +350,27 @@ class EstfeedOptionsFlow(OptionsFlow):
     """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders = {"supplier_error": "", "network_error": ""}
         if user_input is not None:
-            return self.async_create_entry(title="", data=_normalize_pricing(user_input))
+            data = _normalize_pricing(user_input, include_periods=True)
+            checks = (
+                (CONF_SUPPLIER_TARIFFS, parse_supplier_periods, "supplier_error"),
+                (CONF_NETWORK_TARIFFS, parse_network_periods, "network_error"),
+            )
+            for key, parse, placeholder in checks:
+                try:
+                    parse(data[key])
+                except TariffPeriodError as err:
+                    errors[key] = f"invalid_{key}"
+                    placeholders[placeholder] = str(err)
+            if not errors:
+                return self.async_create_entry(title="", data=data)
 
+        current = user_input if user_input is not None else self.config_entry.options
         return self.async_show_form(
             step_id="init",
-            data_schema=_pricing_schema(self.config_entry.options, include_resolution=True),
+            data_schema=_pricing_schema(current, include_resolution=True),
+            errors=errors,
+            description_placeholders=placeholders,
         )

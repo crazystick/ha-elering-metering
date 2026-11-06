@@ -1637,3 +1637,43 @@ async def test_quarter_hour_updates_preserve_all_quarters_across_ticks(hass):
             force_start=False,
         )
     assert [row["sum"] for row in published[consumption_id]] == [4.0, 8.0, 12.0]
+
+
+@pytest.mark.asyncio
+async def test_async_rebuild_cost_since_limits_the_window(hass):
+    """A rebuild for a newly added tariff period starts at that period, so the
+    history before it is left untouched and chained onto."""
+    coord = EstfeedCoordinator(
+        hass=hass, client=MagicMock(), slug="home", options={CONF_BACKFILL_MONTHS: 6}
+    )
+    coord.meters = [_make_meter()]
+    mock_nps = MagicMock()
+    mock_nps.clear_cache = MagicMock()
+    mock_nps.async_get_prices = AsyncMock(return_value={})
+    coord.attach_nps_client(mock_nps)
+    since = datetime.now(tz=UTC) - timedelta(days=3, minutes=17)
+    with (
+        patch.object(coord, "_hourly_energy_from_stats", new=AsyncMock(return_value={})) as hourly,
+        patch.object(coord, "_sum_before_window", new=AsyncMock(return_value=0.0)) as prior,
+        patch(
+            "custom_components.estfeed.coordinator.async_write_cost_statistics_from_hourly",
+            new=AsyncMock(return_value=0.0),
+        ),
+    ):
+        await coord.async_rebuild_cost(since)
+
+    expected_start = since.replace(minute=0, second=0, microsecond=0)
+    assert mock_nps.async_get_prices.await_args.args[0] == expected_start
+    assert {c.args[1] for c in hourly.await_args_list} == {expected_start}
+    assert {c.args[1] for c in prior.await_args_list} == {expected_start}
+
+
+@pytest.mark.asyncio
+async def test_async_rebuild_cost_since_in_future_is_noop(hass):
+    coord = EstfeedCoordinator(hass=hass, client=MagicMock(), slug="home", options={})
+    coord.meters = [_make_meter()]
+    mock_nps = MagicMock()
+    mock_nps.async_get_prices = AsyncMock(return_value={})
+    coord.attach_nps_client(mock_nps)
+    await coord.async_rebuild_cost(datetime.now(tz=UTC) + timedelta(days=30))
+    mock_nps.async_get_prices.assert_not_called()
