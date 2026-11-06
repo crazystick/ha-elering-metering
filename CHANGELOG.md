@@ -4,8 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- **Supplier tariffs** and **Network tariffs** options: dated lists of consumption prices, so contract and network price changes apply from the right day, independently of each other, and earlier history keeps the old price.
+- Supplier periods can be spot + margin, a **fixed price**, or **fixed day/night prices**, with an optional monthly fee.
+- Network periods can have **day/night** per-kWh charges (day = Monday to Friday 07:00–22:00 Estonian time, except public holidays), a flat per-kWh charge and a **monthly fee**. Monthly fees are spread evenly over the hours of the month.
+- Estonian public holiday calendar (including Easter-based holidays), used for the day/night split.
+
 ### Changed
 
+- Changing pricing options now recalculates costs only from the first day whose price changed. Changing VAT, production settings or the plain margin still recalculates the whole window.
 - With 15-minute data resolution, each quarter hour is priced at its own spot price instead of the hourly average, matching how Estonian sellers settle since October 2025. Hourly resolution is unchanged. Run `estfeed.backfill_history` to recalculate past cost statistics.
 
 ## [0.3.1] - 2026-10-06
