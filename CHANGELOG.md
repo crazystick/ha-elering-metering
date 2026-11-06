@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Supplier tariffs** and **Network tariffs** options: dated lists of consumption prices, so contract and network price changes apply from the right day, independently of each other, and earlier history keeps the old price.
+- Supplier periods can be spot + margin, a **fixed price**, or **fixed day/night prices**, with an optional monthly fee.
+- Network periods can have **day/night** per-kWh charges (day = Monday to Friday 07:00–22:00 Estonian time, except public holidays), a flat per-kWh charge and a **monthly fee**. Monthly fees are spread evenly over the hours of the month.
+- Estonian public holiday calendar (including Easter-based holidays), used for the day/night split.
+
+### Changed
+
+- Changing pricing options now recalculates costs only from the first day whose price changed. Changing VAT, production settings or the plain margin still recalculates the whole window.
+
 ## [0.3.0] - 2026-10-05
 
 First release of this fork of [tehisain/ha-estfeed](https://github.com/tehisain/ha-estfeed) (0.2.5).

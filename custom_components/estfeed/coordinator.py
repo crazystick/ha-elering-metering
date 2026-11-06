@@ -37,7 +37,7 @@ from .const import (
     Resolution,
 )
 from .nps import NPS_PRICE_SETTLE_HOURS, EleringNpsClient, NpsError
-from .pricing import PricingConfig, Tariff
+from .pricing import CostModel, PricingConfig, Tariff
 from .statistics import (
     CostStream,
     StatisticStream,
@@ -203,6 +203,10 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
         """Per-kWh price function for a cost (consumption) or compensation stream."""
         return PricingConfig.from_options(self.options).tariff_for(kind)
 
+    def _build_cost(self, kind: Kind) -> Tariff | CostModel:
+        """Pricer used when writing cost statistics (honours tariff periods)."""
+        return PricingConfig.from_options(self.options).cost_for(kind)
+
     def streams_for(self, meter: MeteringPoint) -> list[StatisticStream]:
         suffix = eic_suffix(meter.eic)
         unit = "kWh" if meter.commodity_type.value == "ELECTRICITY" else "m³"
@@ -265,11 +269,13 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
         # value computed before the background fill finished. Nudge listeners.
         self.async_update_listeners()
 
-    async def async_rebuild_cost(self) -> None:
+    async def async_rebuild_cost(self, since: datetime | None = None) -> None:
         """Recompute cost/compensation statistics over the configured window.
 
         Used after VAT/margin option changes and on first run for entries
         upgraded from a pre-cost version. Does not touch energy statistics.
+        ``since`` limits the rebuild to hours from that moment on (used when a
+        tariff period is added or changed, so earlier history is left as is).
 
         Cost is derived from the *stored* hourly energy statistics (not a fresh
         Estfeed fetch) so it stays exactly consistent with the consumption the
@@ -291,6 +297,10 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
         self._nps.clear_cache()
         end = datetime.now(tz=UTC).replace(minute=0, second=0, microsecond=0)
         start = end - timedelta(days=self.backfill_months * 30)
+        if since is not None:
+            start = max(start, since.astimezone(UTC).replace(minute=0, second=0, microsecond=0))
+        if start >= end:
+            return
 
         # The client chunks the fetch internally (≤31 days per request) so a
         # single call here cannot trigger a months-spanning request. A total
@@ -323,7 +333,7 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
                     cstream,
                     hourly_energy,
                     prices,
-                    self._build_tariff(cstream.kind),
+                    self._build_cost(cstream.kind),
                     prior_sum=prior_sum,
                 )
         self.async_update_listeners()
@@ -508,7 +518,7 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
                     if force_start
                     else await self._prior_sum_for_stream(fake)
                 )
-        tariffs = {cstream.kind: self._build_tariff(cstream.kind) for cstream in cost_streams}
+        tariffs = {cstream.kind: self._build_cost(cstream.kind) for cstream in cost_streams}
         cursor = fetch_start
         while cursor < end:
             chunk_end = min(cursor + timedelta(days=MAX_DAYS_PER_REQUEST), end)
@@ -594,10 +604,11 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
         rows = last_stats.get(stream.statistic_id)
         if not rows:
             return None
-        end_ms = rows[0].get("end")
-        if end_ms is None:
+        # Seconds here; only the websocket API returns milliseconds.
+        end_ts = rows[0].get("end")
+        if end_ts is None:
             return None
-        return datetime.fromtimestamp(end_ms / 1000.0, tz=UTC)
+        return datetime.fromtimestamp(float(end_ts), tz=UTC)
 
     async def _prior_sum_for_stream(self, stream: StatisticStream) -> float:
         last_stats = await get_instance(self.hass).async_add_executor_job(
