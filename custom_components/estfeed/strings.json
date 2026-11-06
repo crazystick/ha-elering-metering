@@ -29,7 +29,7 @@
         "data_description": {
           "vat_mode": "The Estonian schedule applies the rate in force on each day (20% until 2023, 22% in 2024 – June 2025, 24% from 1 July 2025), so imported history is priced correctly.",
           "vat_percent": "Used only when the VAT rate is set to a custom value.",
-          "margin_eur_per_kwh": "Added to the Nord Pool spot price before VAT. Example: 0.0050 EUR/kWh = 0.5 cents/kWh. You can include network fees here if they are a flat per-kWh rate. Negative values are allowed.",
+          "margin_eur_per_kwh": "Added to the Nord Pool spot price before VAT. Example: 0.0050 EUR/kWh = 0.5 cents/kWh. Negative values are allowed. For network fees, fixed prices or day/night rates, add supplier and network tariffs under **Configure** after setup.",
           "production_vat": "Leave off unless you are VAT-registered and your electricity buyer pays you VAT on sold energy. Most households are not.",
           "production_fee_eur_per_kwh": "Subtracted from the spot price for energy you sell to the grid. Example: 0.0030 EUR/kWh = 0.3 cents/kWh.",
           "backfill_months": "Imported in the background after setup (1–84 months, 30 days each)."
@@ -76,7 +76,7 @@
     "step": {
       "init": {
         "title": "Estfeed options",
-        "description": "**Cost** = (spot + margin) × (1 + VAT)\n**Compensation** = (spot − production fee) × (1 + VAT if enabled)\n\nChanging a price setting recalculates the cost statistics for the history window in the background.",
+        "description": "**Cost** = (spot + margin) × (1 + VAT), or from the supplier and network tariffs below if set\n**Compensation** = (spot − production fee) × (1 + VAT if enabled)\n\nChanging a price setting recalculates the cost statistics in the background, from the first day whose price changed.",
         "data": {
           "vat_mode": "VAT rate",
           "vat_percent": "Custom VAT rate",
@@ -91,13 +91,13 @@
         "data_description": {
           "vat_mode": "The Estonian schedule applies the rate in force on each day (20% until 2023, 22% in 2024 – June 2025, 24% from 1 July 2025), so imported history is priced correctly.",
           "vat_percent": "Used only when the VAT rate is set to a custom value.",
-          "margin_eur_per_kwh": "Added to the Nord Pool spot price before VAT. Example: 0.0050 EUR/kWh = 0.5 cents/kWh. You can include network fees here if they are a flat per-kWh rate. Negative values are allowed.",
+          "margin_eur_per_kwh": "Added to the Nord Pool spot price before VAT. Example: 0.0050 EUR/kWh = 0.5 cents/kWh. Negative values are allowed. Applies until the first supplier tariff, if any.",
           "production_vat": "Leave off unless you are VAT-registered and your electricity buyer pays you VAT on sold energy. Most households are not.",
           "production_fee_eur_per_kwh": "Subtracted from the spot price for energy you sell to the grid. Example: 0.0030 EUR/kWh = 0.3 cents/kWh.",
           "backfill_months": "Window used when recalculating costs. Use the backfill action to import more history.",
           "resolution": "Hourly is recommended. 15-minute data makes more API calls; statistics are always hourly.",
-          "supplier_tariffs": "Optional YAML list of your electricity seller's prices over time. Each period applies from its `from` date (Estonian time) until the next one; the margin above applies before the first. Each period needs exactly one of `spot_margin` (added to the spot price), `fixed_price`, or `fixed_day` + `fixed_night`; `monthly_fee` is optional. Day = Mon–Fri 07–22 except public holidays. EUR excl. VAT. Example:\n```\n- from: 2025-07-01\n  spot_margin: 0.0092\n- from: 2026-12-01\n  fixed_day: 0.1121\n  fixed_night: 0.0960\n  monthly_fee: 1.61\n```",
-          "network_tariffs": "Optional YAML list of network and state charges over time. `day`/`night` per kWh in the matching hours, `per_kwh` in every hour (single-rate packages, excise, renewable and supply-security charges), `monthly_fee` spread over the month's hours. All optional, EUR excl. VAT. If you don't need the detail, you can leave the supplier list empty and put your whole per-kWh add-on in `per_kwh` instead. Example:\n```\n- from: 2026-06-01\n  day: 0.0369\n  night: 0.0210\n  per_kwh: 0.0181\n  monthly_fee: 20.64\n```"
+          "supplier_tariffs": "Optional YAML list of dated seller prices, each from its `from` date. Per period: `spot_margin`, `fixed_price`, or `fixed_day` + `fixed_night`, plus optional `monthly_fee`. EUR excl. VAT. [Format and examples](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)",
+          "network_tariffs": "Optional YAML list of dated network and state charges: `day`, `night`, `per_kwh`, `monthly_fee`. Day = Mon–Fri 07–22 except public holidays. EUR excl. VAT. [Format and examples](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)"
         }
       }
     },

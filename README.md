@@ -43,7 +43,7 @@ Open **Settings → Devices & services → Add integration** and search for **El
 | --- | --- | --- |
 | VAT rate | Estonian standard rate (date-aware) | Keep the default unless you have a reason to use a fixed rate. |
 | Custom VAT rate | 24% | Used only when *VAT rate* is set to a custom value. |
-| Seller margin and other per-kWh charges | 0 EUR/kWh | Your seller's margin **excluding VAT**, e.g. `0.0050` for 0.5 cents/kWh. A flat per-kWh network fee can be added here too. |
+| Seller margin and other per-kWh charges | 0 EUR/kWh | Your seller's margin **excluding VAT**, e.g. `0.0050` for 0.5 cents/kWh. For network fees, fixed prices or day/night rates, use [supplier and network tariffs](#supplier-and-network-tariffs) instead. |
 | Add VAT to production compensation | Off | Turn on only if you are VAT-registered and your buyer pays VAT on sold energy. |
 | Production fee | 0 EUR/kWh | The amount per kWh your buyer deducts from the spot price for energy you sell, excluding VAT. |
 | History to import | 12 months | 1–84 months, imported in the background after setup. |
@@ -81,9 +81,9 @@ With the default Estonian VAT setting, each hour uses the rate in force on that 
 | 1 January 2024 | 22% |
 | 1 July 2025 | 24% |
 
-Without the tariff lists below, the cost statistics are a close estimate of the **energy** part of your bill. Network fees, the renewable energy charge, excise duty and monthly fees are only included if you add them as a flat amount to the margin. Gas has no cost statistic.
+With only a margin, the cost statistics are a close estimate of the **energy** part of your bill. To include network fees, state charges and monthly fees, or to use fixed prices, set the tariff lists below. Gas has no cost statistic.
 
-### Supplier and network tariffs (fixed prices, day/night rates, monthly fees)
+### Supplier and network tariffs
 
 For a bill-accurate cost, or when you switch between spot and fixed-price contracts, set **Supplier tariffs** and **Network tariffs** in the integration's options. Each is a YAML list of dated periods. A period applies from its `from` date (Estonian time) until the next period in the same list starts, so seller and network prices can change independently. Both lists are optional.
 
