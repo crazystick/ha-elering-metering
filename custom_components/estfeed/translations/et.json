@@ -95,7 +95,7 @@
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Kulude ümberarvutamise aken. Pikema ajaloo importimiseks kasuta ajaloo laadimise toimingut.",
-          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine."
+          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid, kuid iga veerandtund arvutatakse oma börsihinnaga, nagu müüjad arveldavad alates 2025. a oktoobrist; statistika on alati tunnipõhine."
         }
       }
     }

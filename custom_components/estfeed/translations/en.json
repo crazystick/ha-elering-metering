@@ -95,7 +95,7 @@
           "production_vat": "Leave off unless you are VAT-registered and your electricity buyer pays you VAT on sold energy. Most households are not.",
           "production_fee_eur_per_kwh": "Subtracted from the spot price for energy you sell to the grid. Example: 0.0030 EUR/kWh = 0.3 cents/kWh.",
           "backfill_months": "Window used when recalculating costs. Use the backfill action to import more history.",
-          "resolution": "Hourly is recommended. 15-minute data makes more API calls; statistics are always hourly."
+          "resolution": "Hourly is recommended. 15-minute data makes more API calls but prices each quarter hour at its own spot price, as sellers bill since October 2025; statistics are always hourly."
         }
       }
     }

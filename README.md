@@ -68,7 +68,7 @@ For costs, choose **Use an entity tracking the total costs** and pick the matchi
 
 ### How costs are calculated
 
-Electricity prices are the Estonian Nord Pool spot prices published by Elering. Quarter-hour prices are averaged per hour and multiplied by that hour's metered energy:
+Electricity prices are the Estonian Nord Pool spot prices published by Elering. With hourly data, quarter-hour prices are averaged per hour and multiplied by that hour's metered energy. With 15-minute data, each quarter hour's energy is priced at its own spot price, as Estonian sellers settle since October 2025, and the hour's cost is the sum. Quarters without their own price (history published hourly) use the hourly price:
 
 ```text
 Cost          = (spot + margin) × (1 + VAT)
