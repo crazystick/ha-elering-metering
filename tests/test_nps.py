@@ -153,6 +153,24 @@ async def test_async_get_prices_aggregates_quarter_hour_to_hourly_mean(session):
 
 
 @pytest.mark.asyncio
+async def test_quarter_prices_keeps_each_quarter(session):
+    hour0 = datetime(2026, 5, 24, 12, tzinfo=UTC)
+    raw = {hour0 + timedelta(minutes=15 * i): p for i, p in enumerate([2.86, 2.34, 6.85, 6.85])}
+    with aioresponses() as m:
+        m.get(NPS_URL_RE, payload=_stub_response(raw))
+        client = EleringNpsClient(session)
+        await client.async_get_prices(hour0, hour0 + timedelta(hours=1))
+    quarters = client.quarter_prices(hour0, hour0 + timedelta(hours=1))
+    assert quarters == {q: pytest.approx(p / 1000.0) for q, p in raw.items()}
+    # Range is half-open and filters by quarter start.
+    assert list(
+        client.quarter_prices(hour0 + timedelta(minutes=30), hour0 + timedelta(minutes=45))
+    ) == [hour0 + timedelta(minutes=30)]
+    client.clear_cache()
+    assert client.quarter_prices(hour0, hour0 + timedelta(hours=1)) == {}
+
+
+@pytest.mark.asyncio
 async def test_clear_cache_empties_internal_dict(session):
     raw = {datetime(2026, 5, 21, h, tzinfo=UTC): 50.0 for h in range(3)}
     with aioresponses() as m:

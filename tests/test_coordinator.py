@@ -1685,3 +1685,93 @@ async def test_latest_seen_reads_real_recorder_timestamps(hass):
 
     coord = EstfeedCoordinator(hass=hass, client=MagicMock(), slug="home", options={})
     assert await coord._latest_seen_for_stream(stream) == h10 + timedelta(hours=2)
+
+
+def _quarter_interval(minute: int, consumption: float) -> AccountingInterval:
+    return AccountingInterval(
+        period_start=datetime(2026, 5, 21, 10, minute, tzinfo=UTC),
+        consumption_kwh=consumption,
+        production_kwh=0.0,
+        consumption_m3=None,
+        production_m3=None,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("resolution", "expect_quarters"),
+    [(Resolution.QUARTER_HOUR, True), (Resolution.HOUR, False)],
+)
+async def test_fetch_meter_window_passes_quarter_prices_only_for_quarter_resolution(
+    hass, resolution, expect_quarters
+):
+    from custom_components.estfeed.pricing import compute_cost_rows
+
+    h10 = datetime(2026, 5, 21, 10, tzinfo=UTC)
+    quarter_map = {
+        h10 + timedelta(minutes=15 * i): p for i, p in enumerate([0.02, 0.10, 0.10, 0.18])
+    }
+    client = MagicMock()
+    client.get_metering_data = AsyncMock(
+        return_value=[
+            MeterData(
+                eic="38ZEE-00000001-A",
+                intervals=[_quarter_interval(0, 2.0), _quarter_interval(45, 0.0)],
+                error=None,
+            )
+        ]
+    )
+    coord = EstfeedCoordinator(
+        hass=hass,
+        client=client,
+        slug="home",
+        options={CONF_RESOLUTION: resolution.value, CONF_BACKFILL_MONTHS: 12},
+    )
+    coord.meters = [_make_meter()]
+    mock_nps = MagicMock()
+    mock_nps.async_get_prices = AsyncMock(return_value={h10: 0.10})
+    mock_nps.quarter_prices = MagicMock(return_value=quarter_map)
+    coord.attach_nps_client(mock_nps)
+    with (
+        patch(
+            "custom_components.estfeed.coordinator.async_write_meter_statistics",
+            new=AsyncMock(return_value=0.0),
+        ),
+        patch(
+            "custom_components.estfeed.coordinator.async_write_cost_statistics",
+            new=AsyncMock(return_value=0.0),
+        ) as mock_cost,
+        patch.object(coord, "_latest_seen_for_stream", new=AsyncMock(return_value=None)),
+        patch.object(coord, "_prior_sum_for_stream", new=AsyncMock(return_value=0.0)),
+        patch.object(coord, "_sum_before_window", new=AsyncMock(return_value=0.0)),
+    ):
+        await coord._fetch_meter_window(
+            _make_meter(),
+            h10,
+            h10 + timedelta(hours=1),
+            write_stats=True,
+            force_start=True,
+        )
+    assert mock_cost.await_count == 2
+    cost_call = next(
+        c for c in mock_cost.await_args_list if c.args[1].statistic_id.endswith("_cost_001a")
+    )
+    quarters = cost_call.kwargs["quarter_prices"]
+    if expect_quarters:
+        mock_nps.quarter_prices.assert_called_once()
+        assert quarters == quarter_map
+        # Fed through the real pricing code, the 2 kWh use is billed at the 0.02 quarter.
+        rows = compute_cost_rows(
+            cost_call.args[2],
+            Kind.CONSUMPTION,
+            cost_call.args[3],
+            cost_call.args[4],
+            prior_sum=0.0,
+            quarter_prices=quarters,
+        )
+        assert rows[0]["sum"] == pytest.approx(
+            coord._build_tariff(Kind.CONSUMPTION)(h10, 0.02) * 2.0, rel=1e-3
+        )
+    else:
+        mock_nps.quarter_prices.assert_not_called()
+        assert quarters is None

@@ -129,6 +129,7 @@ def compute_cost_rows(
     prices: dict[datetime, float],
     tariff: Tariff,
     prior_sum: float,
+    quarter_prices: Mapping[datetime, float] | None = None,
 ) -> list[StatisticData]:
     """Build cumulative-sum cost rows from raw intervals and an hourly price map.
 
@@ -136,7 +137,13 @@ def compute_cost_rows(
     multiplies each hour's summed kWh by ``tariff(hour, prices[hour])``, and
     produces a running cumulative-sum series in EUR. Skips hours where the price
     is missing (NPS gap or future hour). Rounds to 4 decimal places (€0.0001).
+
+    With ``quarter_prices`` (15-min intervals), each interval is priced at its
+    own quarter's price, as sellers settle since Oct 2025, and the hour's row is
+    the sum. A quarter without its own price falls back to the hourly mean.
     """
+    if quarter_prices is not None:
+        return _quarter_cost_rows(intervals, kind, prices, quarter_prices, tariff, prior_sum)
     hourly: dict[Any, float] = {}
     for ival in intervals:
         value = interval_value(ival, kind)
@@ -146,6 +153,38 @@ def compute_cost_rows(
         hourly[bucket] = hourly.get(bucket, 0.0) + float(value)
 
     return compute_cost_rows_from_hourly(hourly, prices, tariff, prior_sum)
+
+
+def _quarter_cost_rows(
+    intervals: list[AccountingInterval],
+    kind: Kind,
+    prices: Mapping[datetime, float],
+    quarter_prices: Mapping[datetime, float],
+    tariff: Tariff,
+    prior_sum: float,
+) -> list[StatisticData]:
+    hourly: dict[datetime, float | None] = {}
+    for ival in intervals:
+        value = interval_value(ival, kind)
+        if value is None:
+            continue
+        hour = ival.period_start.replace(minute=0, second=0, microsecond=0)
+        price = quarter_prices.get(ival.period_start, prices.get(hour))
+        so_far = hourly.get(hour, 0.0)
+        # An hour with any unpriced interval is skipped whole, as in the hourly path.
+        if price is None or so_far is None:
+            hourly[hour] = None
+        else:
+            hourly[hour] = so_far + float(value) * tariff(ival.period_start, price)
+    rows: list[StatisticData] = []
+    running = prior_sum
+    for start in sorted(hourly):
+        cost = hourly[start]
+        if cost is None:
+            continue
+        running = round(running + round(cost, 4), 4)
+        rows.append({"start": start, "state": running, "sum": running})
+    return rows
 
 
 def compute_cost_rows_from_hourly(

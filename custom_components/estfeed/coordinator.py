@@ -517,6 +517,7 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
             )
             # Fetch prices for this chunk once if any cost stream needs them.
             prices: dict[datetime, float] | None = None
+            quarters: dict[datetime, float] | None = None
             if write_stats and cost_streams and self._nps is not None:
                 # Evict hours whose NPS quarters may still be settling so
                 # they are re-fetched with complete data — without this, an
@@ -528,6 +529,12 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
                 )
                 try:
                     prices = await self._nps.async_get_prices(cursor, chunk_end)
+                    # 15-min readings are priced at each quarter's own price, as sellers bill.
+                    quarters = (
+                        self._nps.quarter_prices(cursor, chunk_end)
+                        if self.resolution == Resolution.QUARTER_HOUR
+                        else None
+                    )
                     self.last_nps_error = None
                 except NpsError as err:
                     self.last_nps_error = str(err)
@@ -582,6 +589,7 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
                             prices,
                             tariffs[cstream.kind],
                             prior_sum=cost_prior_sums[cstream.statistic_id],
+                            quarter_prices=quarters,
                         )
             cursor = chunk_end
 

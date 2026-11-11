@@ -175,6 +175,7 @@ async def async_write_cost_statistics(
     prices: dict[datetime, float],
     tariff: Tariff,
     prior_sum: float,
+    quarter_prices: dict[datetime, float] | None = None,
 ) -> float:
     """Compute cost rows from raw intervals for one meter+kind and publish them.
 
@@ -184,7 +185,9 @@ async def async_write_cost_statistics(
     were produced). Caller chains the return value as the next chunk's
     ``prior_sum`` to avoid a read-after-write hazard against HA's recorder.
     """
-    rows = compute_cost_rows(intervals, stream.kind, prices, tariff, prior_sum=prior_sum)
+    rows = compute_cost_rows(
+        intervals, stream.kind, prices, tariff, prior_sum=prior_sum, quarter_prices=quarter_prices
+    )
     return _publish_cost_rows(hass, stream, rows, prior_sum)
 
 
