@@ -45,6 +45,8 @@ class EleringNpsClient:
         self._session = session
         # Top-of-hour UTC → EUR/kWh
         self._cache: dict[datetime, float] = {}
+        # Quarter start UTC → EUR/kWh, as published (Elering's 15-min rows since Oct 2025).
+        self._quarters: dict[datetime, float] = {}
 
     @property
     def cache_size(self) -> int:
@@ -59,6 +61,7 @@ class EleringNpsClient:
         never refreshed) cannot poison the rewrite.
         """
         self._cache.clear()
+        self._quarters.clear()
 
     def evict_after(self, cutoff: datetime) -> None:
         """Drop cached hours at or after ``cutoff`` (UTC).
@@ -71,6 +74,18 @@ class EleringNpsClient:
         """
         cutoff = cutoff.astimezone(UTC)
         self._cache = {hour: price for hour, price in self._cache.items() if hour < cutoff}
+        self._quarters = {q: price for q, price in self._quarters.items() if q < cutoff}
+
+    def quarter_prices(self, start: datetime, end: datetime) -> dict[datetime, float]:
+        """Return cached 15-min EE prices in [start, end), keyed by quarter start UTC.
+
+        Filled by the same requests as the hourly cache, so call
+        ``async_get_prices`` for the range first. Hours published at hourly
+        resolution (before Oct 2025) have only their :00 entry.
+        """
+        start = start.astimezone(UTC)
+        end = end.astimezone(UTC)
+        return {q: price for q, price in self._quarters.items() if start <= q < end}
 
     def cache_snapshot(self, hours: list[datetime]) -> dict[str, float | None]:
         """Return cached EUR/kWh prices for the given hours, keyed by ISO string.
@@ -152,6 +167,7 @@ class EleringNpsClient:
             if not isinstance(rows, list):
                 raise TypeError("Expected a list of prices")
             buckets: dict[datetime, list[float]] = {}
+            quarters: dict[datetime, float] = {}
             for row in rows:
                 ts = row.get("timestamp")
                 price_eur_per_mwh = row.get("price")
@@ -165,7 +181,9 @@ class EleringNpsClient:
                     continue
                 hour = timestamp.replace(minute=0, second=0, microsecond=0)
                 buckets.setdefault(hour, []).append(price)
+                quarters[timestamp] = price / 1000.0
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError, OSError) as err:
             raise NpsError("NPS returned invalid price data") from err
         for hour, prices in buckets.items():
             self._cache[hour] = (sum(prices) / len(prices)) / 1000.0
+        self._quarters.update(quarters)

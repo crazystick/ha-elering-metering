@@ -12,7 +12,9 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.estfeed.api import (
+    EstfeedAPIError,
     EstfeedAuthError,
+    EstfeedLoginError,
     MeteringPoint,
     Period,
 )
@@ -22,8 +24,10 @@ from custom_components.estfeed.const import (
     CONF_CLIENT_SECRET,
     CONF_FRIENDLY_NAME,
     CONF_MARGIN_EUR_PER_KWH,
+    CONF_NETWORK_TARIFFS,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
     DEFAULT_MARGIN_EUR_PER_KWH,
@@ -37,13 +41,20 @@ from custom_components.estfeed.const import (
 
 @pytest.fixture(autouse=True)
 def _no_entry_setup():
-    """Flow tests stop at the config entry; never run the real entry setup.
+    """Flow tests stop at the config entry; never run the real entry setup,
+    and never probe Elering's Datahub login over the network.
 
     Creating or reloading an entry schedules ``async_setup_entry``. Left
     unpatched it would run after the test's API mocks are gone and race the
     in-memory recorder teardown.
     """
-    with patch("custom_components.estfeed.async_setup_entry", return_value=True):
+    with (
+        patch("custom_components.estfeed.async_setup_entry", return_value=True),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
         yield
 
 
@@ -179,6 +190,43 @@ async def test_user_step_form_never_echoes_secret(hass):
     assert "super-secret-value" not in repr(result2["data_schema"].schema)
 
 
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (EstfeedLoginError("401: invalid_client"), "invalid_auth"),
+        (EstfeedAuthError("403: forbidden"), "no_access"),
+        (EstfeedAPIError("503: unavailable"), "cannot_connect"),
+    ],
+)
+async def test_user_step_explains_which_check_failed(hass, caplog, error, expected):
+    await _setup_recorder(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    with (
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
+            new=AsyncMock(side_effect=error),
+        ),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_CLIENT_ID: "cid",
+                CONF_CLIENT_SECRET: "csec",
+                CONF_FRIENDLY_NAME: "Home",
+            },
+        )
+    assert result2["errors"] == {"base": expected}
+    # Elering's reason is logged so the user can see why, without the secret.
+    assert str(error) in caplog.text
+    assert "csec" not in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_user_step_bad_credentials_shows_form_error(hass):
     await _setup_recorder(hass)
@@ -188,7 +236,7 @@ async def test_user_step_bad_credentials_shows_form_error(hass):
 
     with patch(
         "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
-        new=AsyncMock(side_effect=EstfeedAuthError("bad")),
+        new=AsyncMock(side_effect=EstfeedLoginError("401: invalid_client")),
     ):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -421,8 +469,122 @@ async def test_options_flow_defaults_to_estonian_vat_and_zero_margin(hass):
     rendered = {
         k.schema: k.default()
         for k in schema.schema
-        if hasattr(k, "default") and hasattr(k, "schema")
+        if hasattr(k, "default") and hasattr(k, "schema") and callable(k.default)
     }
     assert rendered[CONF_VAT_MODE] == DEFAULT_VAT_MODE
     assert rendered[CONF_VAT_PERCENT] == DEFAULT_VAT_PERCENT
     assert rendered[CONF_MARGIN_EUR_PER_KWH] == DEFAULT_MARGIN_EUR_PER_KWH
+    # Tariff periods are optional and shown empty (suggested value, no default).
+    assert CONF_SUPPLIER_TARIFFS not in rendered
+    assert CONF_NETWORK_TARIFFS not in rendered
+
+
+async def _open_options(hass):
+    await _setup_recorder(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_CLIENT_ID: "x", CONF_CLIENT_SECRET: "y", CONF_FRIENDLY_NAME: "Home"},
+        options={},
+        unique_id="x",
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    return entry, result
+
+
+_BASE_SUBMISSION = {"resolution": "one_hour", "backfill_months": 12, CONF_VAT_PERCENT: 24.0}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_stores_supplier_and_network_tariffs(hass):
+    entry, result = await _open_options(hass)
+    supplier = "- from: 2026-12-01\n  fixed_day: 0.1121\n  fixed_night: 0.096\n"
+    network = "- from: 2026-06-01\n  day: 0.0369\n  night: 0.021\n  monthly_fee: 20.64\n"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**_BASE_SUBMISSION, CONF_SUPPLIER_TARIFFS: supplier, CONF_NETWORK_TARIFFS: network},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SUPPLIER_TARIFFS] == supplier.strip()
+    assert entry.options[CONF_NETWORK_TARIFFS] == network.strip()
+
+
+@pytest.mark.asyncio
+async def test_options_flow_without_tariffs_stores_empty_text(hass):
+    entry, result = await _open_options(hass)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], _BASE_SUBMISSION)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SUPPLIER_TARIFFS] == ""
+    assert entry.options[CONF_NETWORK_TARIFFS] == ""
+
+
+@pytest.mark.asyncio
+async def test_options_flow_reports_errors_per_field(hass):
+    entry, result = await _open_options(hass)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **_BASE_SUBMISSION,
+            CONF_SUPPLIER_TARIFFS: "- from: 2026-12-01\n  fixed_day: 0.1\n",
+            CONF_NETWORK_TARIFFS: "- from: 2026-06-01\n  fixed_price: 0.1\n",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_SUPPLIER_TARIFFS: "invalid_supplier_tariffs",
+        CONF_NETWORK_TARIFFS: "invalid_network_tariffs",
+    }
+    assert "go together" in result["description_placeholders"]["supplier_error"]
+    assert "unknown key" in result["description_placeholders"]["network_error"]
+    assert result["description_placeholders"]["tariffs_docs_url"].startswith("https://")
+    assert CONF_SUPPLIER_TARIFFS not in entry.options
+
+
+async def test_user_step_recognises_datahub_technical_user(hass, caplog):
+    """Datahub technical-user credentials are rejected by the customer login;
+    setup must say which kind of key to create instead of a generic error."""
+    await _setup_recorder(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    with (
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.list_metering_points",
+            new=AsyncMock(side_effect=EstfeedLoginError("401: invalid_client")),
+        ),
+        patch(
+            "custom_components.estfeed.config_flow.EstfeedClient.async_is_datahub_technical_user",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_CLIENT_ID: "cid",
+                CONF_CLIENT_SECRET: "csec",
+                CONF_FRIENDLY_NAME: "Home",
+            },
+        )
+    assert result2["errors"] == {"base": "datahub_key"}
+    assert "kliendiportaal.elering.ee" in caplog.text
+    assert "csec" not in caplog.text
+
+
+def test_translations_have_no_urls():
+    """hassfest rejects URLs in translation strings; they go in placeholders."""
+    import json
+    from pathlib import Path
+
+    base = Path(__file__).parent.parent / "custom_components" / "estfeed"
+    files = [base / "strings.json", *sorted((base / "translations").glob("*.json"))]
+
+    def strings(node):
+        if isinstance(node, dict):
+            for value in node.values():
+                yield from strings(value)
+        elif isinstance(node, str):
+            yield node
+
+    for path in files:
+        for text in strings(json.loads(path.read_text(encoding="utf-8"))):
+            assert "://" not in text, f"{path.name}: {text}"

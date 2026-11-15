@@ -26,6 +26,9 @@ CONF_VAT_PERCENT: Final = "vat_percent"
 CONF_MARGIN_EUR_PER_KWH: Final = "margin_eur_per_kwh"
 CONF_PRODUCTION_VAT: Final = "production_vat"
 CONF_PRODUCTION_FEE_EUR_PER_KWH: Final = "production_fee_eur_per_kwh"
+# Optional YAML lists of dated consumption tariffs (see pricing.parse_*_periods).
+CONF_SUPPLIER_TARIFFS: Final = "supplier_tariffs"
+CONF_NETWORK_TARIFFS: Final = "network_tariffs"
 
 VAT_MODE_ESTONIA: Final = "estonia"
 VAT_MODE_CUSTOM: Final = "custom"
@@ -35,6 +38,7 @@ DEFAULT_VAT_PERCENT: Final = 24.0
 DEFAULT_MARGIN_EUR_PER_KWH: Final = 0.0
 DEFAULT_PRODUCTION_VAT: Final = False
 DEFAULT_PRODUCTION_FEE_EUR_PER_KWH: Final = 0.0
+DEFAULT_TARIFFS: Final = ""
 
 # Changing any of these rebuilds the cost/compensation statistics.
 PRICING_OPTION_KEYS: Final = (
@@ -43,6 +47,8 @@ PRICING_OPTION_KEYS: Final = (
     CONF_MARGIN_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
+    CONF_SUPPLIER_TARIFFS,
+    CONF_NETWORK_TARIFFS,
 )
 
 UPDATE_INTERVAL: Final = timedelta(hours=1)
@@ -50,7 +56,17 @@ ROLLING_CACHE_DAYS: Final = 62
 DATA_FRESH_THRESHOLD: Final = timedelta(hours=30)
 
 API_BASE_URL: Final = "https://estfeed.elering.ee"
+# API keys for the customer API are created in the e-Elering customer portal
+# and log in through the "elering-sso" realm.
 KEYCLOAK_TOKEN_URL: Final = "https://kc.elering.ee/realms/elering-sso/protocol/openid-connect/token"
+CUSTOMER_PORTAL_URL: Final = "https://kliendiportaal.elering.ee/"
+TARIFFS_DOCS_URL: Final = (
+    "https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs"
+)
+# Estfeed Datahub "technical users" (created at estfeed.elering.ee for market
+# participants) log in through a different realm and cannot use the customer
+# API. Only used to tell users they created the wrong kind of key.
+DATAHUB_TOKEN_URL: Final = "https://kc.elering.ee/realms/estfeed/protocol/openid-connect/token"
 RATE_LIMIT_SECONDS: Final = 5.0
 TOKEN_REFRESH_MARGIN_SECONDS: Final = 30
 REQUEST_TIMEOUT_SECONDS: Final = 30

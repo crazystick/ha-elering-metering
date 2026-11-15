@@ -165,6 +165,76 @@ def test_compute_cost_rows_aggregates_quarter_hour_intervals():
     assert rows[0]["sum"] == pytest.approx(0.05)
 
 
+def _q(minute: int) -> datetime:
+    return datetime(2026, 5, 21, 10, minute, tzinfo=UTC)
+
+
+def test_compute_cost_rows_prices_each_quarter_on_its_own():
+    # All use falls in the cheapest quarter: the hourly mean would overcharge it.
+    intervals = [_interval(10, 0, consumption=2.0), _interval(10, 45, consumption=0.0)]
+    prices = {_q(0): 0.10}  # hourly mean of the quarters below
+    quarters = {_q(0): 0.02, _q(15): 0.10, _q(30): 0.10, _q(45): 0.18}
+    rows = compute_cost_rows(
+        intervals,
+        Kind.CONSUMPTION,
+        prices,
+        make_tariff(0.0, 0.0),
+        prior_sum=1.0,
+        quarter_prices=quarters,
+    )
+    # 1.0 prior + 2.0 kWh * 0.02 = 1.04, not 1.0 + 2.0 * 0.10 = 1.20 at the hourly mean
+    assert [r["start"] for r in rows] == [_q(0)]
+    assert rows[0]["sum"] == pytest.approx(1.04)
+    assert rows[0]["state"] == rows[0]["sum"]
+
+
+def test_compute_cost_rows_quarter_falls_back_to_hourly_price():
+    intervals = [_interval(10, 0, consumption=1.0), _interval(10, 15, consumption=1.0)]
+    prices = {_q(0): 0.05}
+    quarters = {_q(0): 0.03}
+    rows = compute_cost_rows(
+        intervals,
+        Kind.CONSUMPTION,
+        prices,
+        make_tariff(24.0, 0.0),
+        prior_sum=0.0,
+        quarter_prices=quarters,
+    )
+    # (1.0 * 0.03 + 1.0 * 0.05) * 1.24 = 0.0992
+    assert rows[0]["sum"] == pytest.approx(0.0992)
+
+
+def test_compute_cost_rows_quarter_skips_hour_with_unpriced_interval():
+    intervals = [
+        _interval(10, 0, consumption=1.0),
+        _interval(11, 0, consumption=1.0),
+        _interval(11, 15, consumption=1.0),
+    ]
+    eleven = datetime(2026, 5, 21, 11, tzinfo=UTC)
+    rows = compute_cost_rows(
+        intervals,
+        Kind.CONSUMPTION,
+        prices={_q(0): 0.05},
+        tariff=make_tariff(0.0, 0.0),
+        prior_sum=0.0,
+        quarter_prices={_q(0): 0.05, eleven: 0.07},
+    )
+    # Hour 11 has no price for :15 and no hourly price: skipped whole, like the hourly path.
+    assert [r["start"] for r in rows] == [_q(0)]
+    assert rows[0]["sum"] == pytest.approx(0.05)
+
+
+def test_compute_cost_rows_empty_quarter_map_matches_hourly_path():
+    intervals = [_interval(10, 0, consumption=0.4), _interval(10, 30, consumption=0.6)]
+    prices = {_q(0): 0.05}
+    tariff = make_tariff(24.0, 0.005)
+    hourly = compute_cost_rows(intervals, Kind.CONSUMPTION, prices, tariff, prior_sum=0.0)
+    quarter = compute_cost_rows(
+        intervals, Kind.CONSUMPTION, prices, tariff, prior_sum=0.0, quarter_prices={}
+    )
+    assert quarter == hourly
+
+
 def test_compute_cost_rows_applies_tariff():
     intervals = [_interval(10, consumption=2.0)]
     prices = {datetime(2026, 5, 21, 10, tzinfo=UTC): 0.05}

@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Ühenda Elering Estfeediga",
-        "description": "Loo API võti [Estfeedi portaalis]({portal_url}) ning sisesta selle andmed allpool. Andmeid saadetakse ainult Eleringile.",
+        "description": "Loo API võti [e-Eleringi kliendiportaalis]({portal_url}) ning sisesta selle kliendi ID ja saladus allpool. Andmeid saadetakse ainult Eleringile.\n\nKasuta kliendiportaalis loodud võtit. Estfeedi andmelao portaali (estfeed.elering.ee) *tehniline kasutaja* ei sobi.",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)",
           "friendly_name": "Paigalduse nimi"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele.",
           "friendly_name": "Kasutatakse olemite ja statistika ID-des, nt \"Kodu\" → estfeed:kodu_consumption_…. Hiljem muutes kaob ajalugu."
         }
@@ -29,7 +29,7 @@
         "data_description": {
           "vat_mode": "Eesti graafik rakendab igal päeval kehtinud määra (kuni 2023 20%, 2024 – juuni 2025 22%, alates 1. juulist 2025 24%), nii et imporditud ajalugu hinnastatakse õigesti.",
           "vat_percent": "Kasutatakse ainult siis, kui käibemaksumääraks on valitud kohandatud väärtus.",
-          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Siia võib lisada ka võrgutasu, kui see on fikseeritud kWh-hind. Negatiivne väärtus on lubatud.",
+          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Negatiivne väärtus on lubatud. Võrgutasude, fikseeritud hinna või päeva/öö hindade jaoks lisa pärast seadistamist menüüs **Seadista** müüja ja võrgu tariifid.",
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Imporditakse taustal pärast seadistamist (1–84 kuud, igaüks 30 päeva)."
@@ -37,34 +37,36 @@
       },
       "reauth_confirm": {
         "title": "Estfeedi uuesti autentimine",
-        "description": "Paigalduse **{name}** API võti lükati tagasi. Sisesta kehtiv võti [Estfeedi portaalist]({portal_url}).",
+        "description": "Paigalduse **{name}** API võti lükati tagasi. Sisesta kehtiv võti [e-Eleringi kliendiportaalist]({portal_url}).",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele."
         }
       },
       "reconfigure": {
         "title": "Muuda API võtit",
-        "description": "Sisesta paigaldusele **{name}** uued API andmed [Estfeedi portaalist]({portal_url}). Ajalugu ja olemid säilivad.",
+        "description": "Sisesta paigaldusele **{name}** uued API andmed [e-Eleringi kliendiportaalist]({portal_url}). Ajalugu ja olemid säilivad.",
         "data": {
           "client_id": "Kliendi ID (client_id)",
           "client_secret": "Kliendi saladus (client_secret)"
         },
         "data_description": {
-          "client_id": "Estfeedi portaalis API võtme juures kuvatav UUID.",
+          "client_id": "e-Eleringi kliendiportaalis API võtme juures kuvatav UUID.",
           "client_secret": "Kuvatakse API võtme loomisel. Hoitakse ainult sinu Home Assistanti seadistustes ja saadetakse ainult Eleringi sisselogimisteenusele."
         }
       }
     },
     "error": {
-      "invalid_auth": "Elering lükkas kliendi ID või saladuse tagasi.",
+      "invalid_auth": "Eleringi sisselogimisteenus lükkas selle kliendi ID ja saladuse tagasi. Kontrolli, et võti on loodud e-Eleringi kliendiportaalis (kliendiportaal.elering.ee), et kopeerisid kogu saladuse, et ID ja saladus ei ole vahetuses ning et võti on endiselt aktiivne. Eleringi põhjus on kirjas Home Assistanti logis.",
       "cannot_connect": "Estfeedi API-ga ei õnnestunud ühendust luua. Proovi hiljem uuesti.",
       "slug_in_use": "Teine Estfeedi paigaldus kasutab juba seda nime.",
-      "already_configured": "Seda API võtit kasutab juba teine Estfeedi paigaldus."
+      "already_configured": "Seda API võtit kasutab juba teine Estfeedi paigaldus.",
+      "no_access": "Elering võttis API võtme vastu, kuid keeldus mõõteandmetele ligipääsust. Kontrolli e-Eleringi kliendiportaalis, et võti on aktiivne ja sellel on ligipääs sinu mõõtepunktidele. Eleringi põhjus on kirjas Home Assistanti logis.",
+      "datahub_key": "Need on Estfeedi andmelao tehnilise kasutaja andmed (estfeed.elering.ee), millega sinu mõõteandmeid lugeda ei saa. Loo API võti e-Eleringi kliendiportaalis (kliendiportaal.elering.ee) ja kasuta seda."
     },
     "abort": {
       "already_configured": "See API võti on juba seadistatud.",
@@ -76,7 +78,7 @@
     "step": {
       "init": {
         "title": "Estfeedi seaded",
-        "description": "**Kulu** = (börsihind + marginaal) × (1 + km)\n**Hüvitis** = (börsihind − tootmistasu) × (1 + km, kui lubatud)\n\nHinnaseadete muutmisel arvutatakse ajalooakna kulustatistika taustal ümber.",
+        "description": "**Kulu** = (börsihind + marginaal) × (1 + km) või allolevate müüja ja võrgu tariifide järgi, kui need on määratud\n**Hüvitis** = (börsihind − tootmistasu) × (1 + km, kui lubatud)\n\nHinnaseadete muutmisel arvutatakse kulustatistika taustal ümber alates esimesest päevast, mille hind muutus.",
         "data": {
           "vat_mode": "Käibemaksumäär",
           "vat_percent": "Kohandatud käibemaksumäär",
@@ -84,18 +86,26 @@
           "production_vat": "Lisa tootmise hüvitisele käibemaks",
           "production_fee_eur_per_kwh": "Ostja poolt kinni peetav tootmistasu (km-ta)",
           "backfill_months": "Imporditav ajalugu (kuud)",
-          "resolution": "Andmete täpsus"
+          "resolution": "Andmete täpsus",
+          "supplier_tariffs": "Müüja tariifid (täpsem)",
+          "network_tariffs": "Võrgutariifid (täpsem)"
         },
         "data_description": {
           "vat_mode": "Eesti graafik rakendab igal päeval kehtinud määra (kuni 2023 20%, 2024 – juuni 2025 22%, alates 1. juulist 2025 24%), nii et imporditud ajalugu hinnastatakse õigesti.",
           "vat_percent": "Kasutatakse ainult siis, kui käibemaksumääraks on valitud kohandatud väärtus.",
-          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Siia võib lisada ka võrgutasu, kui see on fikseeritud kWh-hind. Negatiivne väärtus on lubatud.",
+          "margin_eur_per_kwh": "Lisatakse Nord Pooli börsihinnale enne käibemaksu. Näide: 0,0050 EUR/kWh = 0,5 senti/kWh. Negatiivne väärtus on lubatud. Kehtib kuni esimese müüja tariifini, kui see on määratud.",
           "production_vat": "Jäta välja, kui sa ei ole käibemaksukohustuslane ja elektri ostja ei maksa sulle müüdud energialt käibemaksu. Enamik kodumajapidamisi ei ole.",
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Kulude ümberarvutamise aken. Pikema ajaloo importimiseks kasuta ajaloo laadimise toimingut.",
-          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid; statistika on alati tunnipõhine."
+          "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid, kuid iga veerandtund arvutatakse oma börsihinnaga, nagu müüjad arveldavad alates 2025. a oktoobrist; statistika on alati tunnipõhine.",
+          "supplier_tariffs": "Valikuline YAML-loend müüja hindadest, iga periood alates `from` kuupäevast. Perioodil: `spot_margin`, `fixed_price` või `fixed_day` + `fixed_night`, lisaks valikuline `monthly_fee`. Eurodes ilma käibemaksuta. [Vorming ja näited]({tariffs_docs_url})",
+          "network_tariffs": "Valikuline YAML-loend võrgu- ja riiklikest tasudest: `day`, `night`, `per_kwh`, `monthly_fee`. Päev = E–R 7–22, v.a riigipühad. Eurodes ilma käibemaksuta. [Vorming ja näited]({tariffs_docs_url})"
         }
       }
+    },
+    "error": {
+      "invalid_supplier_tariffs": "Müüja tariifid: {supplier_error}",
+      "invalid_network_tariffs": "Võrgutariifid: {network_error}"
     }
   },
   "selector": {

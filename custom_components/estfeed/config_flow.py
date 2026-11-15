@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -28,38 +29,45 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import EstfeedAuthError, EstfeedClient, EstfeedError
+from .api import EstfeedAuthError, EstfeedClient, EstfeedError, EstfeedLoginError
 from .const import (
     CONF_BACKFILL_MONTHS,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
     CONF_FRIENDLY_NAME,
     CONF_MARGIN_EUR_PER_KWH,
+    CONF_NETWORK_TARIFFS,
     CONF_PRODUCTION_FEE_EUR_PER_KWH,
     CONF_PRODUCTION_VAT,
     CONF_RESOLUTION,
+    CONF_SUPPLIER_TARIFFS,
     CONF_VAT_MODE,
     CONF_VAT_PERCENT,
+    CUSTOMER_PORTAL_URL,
     DEFAULT_BACKFILL_MONTHS,
     DEFAULT_FRIENDLY_NAME,
     DEFAULT_MARGIN_EUR_PER_KWH,
     DEFAULT_PRODUCTION_FEE_EUR_PER_KWH,
     DEFAULT_PRODUCTION_VAT,
+    DEFAULT_TARIFFS,
     DEFAULT_VAT_MODE,
     DEFAULT_VAT_PERCENT,
     DOMAIN,
     MAX_BACKFILL_MONTHS,
     MIN_BACKFILL_MONTHS,
+    TARIFFS_DOCS_URL,
     VAT_MODE_CUSTOM,
     VAT_MODE_ESTONIA,
     Resolution,
 )
+from .pricing import TariffPeriodError, parse_network_periods, parse_supplier_periods
 from .utils import slugify
 
-ESTFEED_PORTAL_URL = "https://estfeed.elering.ee/"
+_LOGGER = logging.getLogger(__name__)
 
 _TEXT = TextSelector()
 _PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+_MULTILINE = TextSelector(TextSelectorConfig(multiline=True))
 
 
 def _eur_per_kwh(minimum: float, maximum: float) -> NumberSelector:
@@ -141,6 +149,13 @@ def _pricing_schema(current: Mapping[str, Any], *, include_resolution: bool) -> 
         ),
     }
     if include_resolution:
+        # Advanced, options-only: dated supplier and network tariffs.
+        for key in (CONF_SUPPLIER_TARIFFS, CONF_NETWORK_TARIFFS):
+            fields[
+                vol.Optional(
+                    key, description={"suggested_value": current.get(key, DEFAULT_TARIFFS)}
+                )
+            ] = _MULTILINE
         fields[
             vol.Required(
                 CONF_RESOLUTION,
@@ -156,7 +171,9 @@ def _pricing_schema(current: Mapping[str, Any], *, include_resolution: bool) -> 
     return vol.Schema(fields)
 
 
-def _normalize_pricing(user_input: Mapping[str, Any]) -> dict[str, Any]:
+def _normalize_pricing(
+    user_input: Mapping[str, Any], *, include_periods: bool = False
+) -> dict[str, Any]:
     """Coerce selector output (floats from number boxes) into stored types."""
     data = dict(user_input)
     data[CONF_VAT_PERCENT] = float(data[CONF_VAT_PERCENT])
@@ -164,6 +181,9 @@ def _normalize_pricing(user_input: Mapping[str, Any]) -> dict[str, Any]:
     data[CONF_PRODUCTION_FEE_EUR_PER_KWH] = float(data[CONF_PRODUCTION_FEE_EUR_PER_KWH])
     data[CONF_PRODUCTION_VAT] = bool(data[CONF_PRODUCTION_VAT])
     data[CONF_BACKFILL_MONTHS] = int(data[CONF_BACKFILL_MONTHS])
+    for key in (CONF_SUPPLIER_TARIFFS, CONF_NETWORK_TARIFFS):
+        if key in data or include_periods:
+            data[key] = str(data.get(key) or "").strip()
     return data
 
 
@@ -176,15 +196,18 @@ def _clean_credentials(user_input: Mapping[str, Any]) -> dict[str, Any]:
     return data
 
 
-async def _validate(hass: HomeAssistant, credentials: Mapping[str, Any]) -> None:
-    """Prove the credentials work by listing the key's metering points."""
-    client = EstfeedClient(
+def _client(hass: HomeAssistant, credentials: Mapping[str, Any]) -> EstfeedClient:
+    return EstfeedClient(
         session=async_get_clientsession(hass),
         client_id=credentials[CONF_CLIENT_ID],
         client_secret=credentials[CONF_CLIENT_SECRET],
     )
+
+
+async def _validate(hass: HomeAssistant, credentials: Mapping[str, Any]) -> None:
+    """Prove the credentials work by listing the key's metering points."""
     end = datetime.now(tz=UTC)
-    await client.list_metering_points(end - timedelta(days=7), end)
+    await _client(hass, credentials).list_metering_points(end - timedelta(days=7), end)
 
 
 class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -220,9 +243,22 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_check_credentials(self, credentials: Mapping[str, Any]) -> dict[str, str]:
         try:
             await _validate(self.hass, credentials)
-        except EstfeedAuthError:
+        except EstfeedLoginError as err:
+            _LOGGER.warning("Estfeed credential check failed: %s", err)
+            if await _client(self.hass, credentials).async_is_datahub_technical_user():
+                _LOGGER.warning(
+                    "These credentials belong to an Estfeed Datahub technical user, "
+                    "which cannot read the customer API. Create an API key in the "
+                    "e-Elering customer portal (%s) instead",
+                    CUSTOMER_PORTAL_URL,
+                )
+                return {"base": "datahub_key"}
             return {"base": "invalid_auth"}
-        except EstfeedError:
+        except EstfeedAuthError as err:
+            _LOGGER.warning("Estfeed API refused the API key: %s", err)
+            return {"base": "no_access"}
+        except EstfeedError as err:
+            _LOGGER.warning("Could not reach Estfeed during setup: %s", err)
             return {"base": "cannot_connect"}
         return {}
 
@@ -251,7 +287,7 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
                 with_name=True,
             ),
             errors=errors,
-            description_placeholders={"portal_url": ESTFEED_PORTAL_URL},
+            description_placeholders={"portal_url": CUSTOMER_PORTAL_URL},
         )
 
     async def async_step_pricing(
@@ -314,7 +350,7 @@ class EstfeedConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=_credentials_schema(entry.data, with_name=False),
             errors=errors,
             description_placeholders={
-                "portal_url": ESTFEED_PORTAL_URL,
+                "portal_url": CUSTOMER_PORTAL_URL,
                 "name": entry.title,
             },
         )
@@ -333,10 +369,31 @@ class EstfeedOptionsFlow(OptionsFlow):
     """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders = {
+            "supplier_error": "",
+            "network_error": "",
+            "tariffs_docs_url": TARIFFS_DOCS_URL,
+        }
         if user_input is not None:
-            return self.async_create_entry(title="", data=_normalize_pricing(user_input))
+            data = _normalize_pricing(user_input, include_periods=True)
+            checks = (
+                (CONF_SUPPLIER_TARIFFS, parse_supplier_periods, "supplier_error"),
+                (CONF_NETWORK_TARIFFS, parse_network_periods, "network_error"),
+            )
+            for key, parse, placeholder in checks:
+                try:
+                    parse(data[key])
+                except TariffPeriodError as err:
+                    errors[key] = f"invalid_{key}"
+                    placeholders[placeholder] = str(err)
+            if not errors:
+                return self.async_create_entry(title="", data=data)
 
+        current = user_input if user_input is not None else self.config_entry.options
         return self.async_show_form(
             step_id="init",
-            data_schema=_pricing_schema(self.config_entry.options, include_resolution=True),
+            data_schema=_pricing_schema(current, include_resolution=True),
+            errors=errors,
+            description_placeholders=placeholders,
         )

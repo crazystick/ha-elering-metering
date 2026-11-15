@@ -16,13 +16,19 @@ from custom_components.estfeed.api import (
     EstfeedAPIError,
     EstfeedAuthError,
     EstfeedClient,
+    EstfeedLoginError,
     EstfeedRateLimitError,
     EstfeedTimeoutError,
     MeterData,
     MeteringPoint,
     Period,
 )
-from custom_components.estfeed.const import KEYCLOAK_TOKEN_URL, CommodityType, Resolution
+from custom_components.estfeed.const import (
+    DATAHUB_TOKEN_URL,
+    KEYCLOAK_TOKEN_URL,
+    CommodityType,
+    Resolution,
+)
 
 
 def test_metering_point_from_dict():
@@ -400,6 +406,44 @@ async def test_token_error_status_is_handled_before_parsing_body(client, status,
 
 
 @pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (
+            401,
+            {"error": "invalid_client", "error_description": "Invalid client credentials"},
+            "401: invalid_client: Invalid client credentials",
+        ),
+        (400, {"error": "unauthorized_client"}, "400: unauthorized_client"),
+        (401, "<html>Error</html>", "401: no error details"),
+    ],
+)
+async def test_login_rejection_reports_oauth_error_without_secret(client, status, body, expected):
+    """The login error names Elering's reason so users can fix the right thing,
+    and never repeats the submitted secret."""
+    with aioresponses() as mocked:
+        if isinstance(body, dict):
+            mocked.post(KEYCLOAK_TOKEN_URL, status=status, payload=body)
+        else:
+            mocked.post(KEYCLOAK_TOKEN_URL, status=status, body=body)
+        with pytest.raises(EstfeedLoginError) as exc_info:
+            await client._ensure_token()
+    assert expected in str(exc_info.value)
+    assert "csec" not in str(exc_info.value)
+
+
+async def test_api_refusal_after_login_is_not_a_login_error(client):
+    with aioresponses() as mocked:
+        mocked.post(
+            KEYCLOAK_TOKEN_URL,
+            payload={"access_token": "t", "expires_in": 300, "token_type": "Bearer"},
+        )
+        mocked.get("https://estfeed.elering.ee/api/public/v1/x", status=403, body="")
+        with pytest.raises(EstfeedAuthError) as exc_info:
+            await client._request_json("GET", "/api/public/v1/x")
+    assert not isinstance(exc_info.value, EstfeedLoginError)
+
+
+@pytest.mark.parametrize(
     "response", [[], {}, {"access_token": None}, {"access_token": "t", "expires_in": "invalid"}]
 )
 async def test_malformed_token_response_raises_api_error(client, response):
@@ -424,3 +468,16 @@ async def test_malformed_meter_response_raises_api_error(client, endpoint, respo
                 await client.list_metering_points(start, end)
             else:
                 await client.get_metering_data(start, end, Resolution.HOUR)
+
+
+@pytest.mark.parametrize(("status", "expected"), [(200, True), (401, False), (400, False)])
+async def test_datahub_technical_user_detection(client, status, expected):
+    with aioresponses() as mocked:
+        mocked.post(DATAHUB_TOKEN_URL, status=status, payload={"access_token": "t"})
+        assert await client.async_is_datahub_technical_user() is expected
+
+
+async def test_datahub_detection_treats_network_errors_as_no(client):
+    with aioresponses() as mocked:
+        mocked.post(DATAHUB_TOKEN_URL, exception=aiohttp.ClientConnectionError("down"))
+        assert await client.async_is_datahub_technical_user() is False
