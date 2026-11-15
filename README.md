@@ -102,7 +102,7 @@ Cost          = (spot + margin) × (1 + VAT)
 Compensation  = (spot − production fee) × (1 + VAT, only if enabled)
 ```
 
-Spot prices are the Estonian Nord Pool prices published by Elering. With **hourly** data, the hour's quarter-hour prices are averaged. With **15-minute** data, each quarter hour is priced at its own spot price, as Estonian sellers bill since October 2025.
+Spot prices are the Estonian Nord Pool prices published by Elering. With **hourly** data, the hour's quarter-hour prices are averaged. With **15-minute** data, each quarter hour is priced at its own spot price, as Estonian sellers bill since October 2025. This also applies when costs are recalculated after a price change.
 
 With the default VAT setting, each hour uses the rate in force on that day in Estonian time:
 
@@ -144,7 +144,7 @@ Under **Settings → Devices & services → Elering Estfeed → Configure** ther
 
 The values above are examples. Copy yours from your seller's contract and your network operator's price list.
 
-**Day** is Monday to Friday 07:00–22:00 Estonian time, except public holidays. Every other hour is **night**. Monthly fees are spread evenly over the hours of the month.
+**Day** is Monday to Friday 07:00–22:00 Estonian time, all year, except public holidays. Every other hour is **night**. This matches Elektrilevi's current price list. Monthly fees are spread evenly over the hours of the month.
 
 ```text
 Cost of an hour = ( kWh × (supplier price + network day/night + per_kwh)
@@ -160,8 +160,6 @@ Simplest bill-accurate setup: leave **Supplier tariffs** empty, keep your seller
 ```
 
 Tariffs affect consumption cost only, not production compensation. When you change them, costs are recalculated from the first day whose price changed. Earlier history is kept.
-
-If you use 15-minute data, run [`estfeed.backfill_history`](#actions) after changing prices. The automatic recalculation uses stored hourly energy, so it prices whole hours.
 
 ## Options
 
@@ -351,9 +349,9 @@ Võrk: `day` ja `night` (päeva- ja öötariif), `per_kwh` (iga tund, nt aktsiis
   monthly_fee: 20.64
 ```
 
-Need on näidisväärtused. Võta oma hinnad müüja lepingust ja võrguettevõtja hinnakirjast. **Päev** on E–R kell 7–22 Eesti aja järgi, v.a riigipühad, ülejäänud aeg on **öö**. Kuutasu jagatakse kuu tundide vahel ühtlaselt.
+Need on näidisväärtused. Võta oma hinnad müüja lepingust ja võrguettevõtja hinnakirjast. **Päev** on E–R kell 7–22 Eesti aja järgi aasta ringi, v.a riigipühad, ülejäänud aeg on **öö**. Nii on see Elektrilevi kehtivas hinnakirjas. Kuutasu jagatakse kuu tundide vahel ühtlaselt.
 
-Tariifi muutmisel arvutatakse kulu ümber alates esimesest päevast, mille hind muutus. 15-minutiliste andmete korral käivita pärast hinnamuutust ka toiming `estfeed.backfill_history`.
+Tariifi muutmisel arvutatakse kulu ümber alates esimesest päevast, mille hind muutus.
 
 ### Probleemid
 

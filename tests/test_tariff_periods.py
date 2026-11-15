@@ -328,6 +328,23 @@ def test_quarter_prices_with_spot_tariff_skip_unpriced_hours():
     assert rows == []
 
 
+def test_stored_hours_split_with_cost_model_add_fee_and_vat_once():
+    model = _model(network=[_NET])
+    hour = _local(2026, 12, 2, 10)  # Wednesday, day rate; December has 744 h
+    q0, q15, q30, q45 = (hour + timedelta(minutes=15 * i) for i in range(4))
+    rows = compute_cost_rows_from_hourly(
+        {hour: 2.0},
+        {hour: 0.06},
+        model,
+        prior_sum=0.0,
+        quarter_split={hour: {q0: 0.25, q15: 0.25, q30: 0.0, q45: 0.0}},
+        quarter_prices={q0: 0.02, q15: 0.10},
+    )
+    network = 0.04 + 0.01
+    energy = 1.0 * (0.02 + 0.01 + network) + 1.0 * (0.10 + 0.01 + network)
+    assert rows[0]["sum"] == pytest.approx(round((energy + 20.0 / 744) * 1.24, 4))
+
+
 # ---- PricingConfig integration ----
 
 

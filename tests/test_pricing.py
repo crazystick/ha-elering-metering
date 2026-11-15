@@ -370,3 +370,76 @@ def test_compute_cost_rows_delegates_to_hourly_builder():
         prior_sum=0.0,
     )
     assert via_intervals == via_hourly
+
+
+# ---- stored hourly energy split between quarters (cost rebuild, 15-min data) ----
+
+
+def test_hourly_rows_split_stored_energy_between_quarters():
+    # Stored hour: 2.0 kWh. The 15-min readings (sum 1.0) only give proportions.
+    hour = _q(0)
+    rows = compute_cost_rows_from_hourly(
+        {hour: 2.0},
+        {hour: 0.10},
+        make_tariff(0.0, 0.0),
+        prior_sum=1.0,
+        quarter_split={hour: {_q(0): 0.9, _q(15): 0.0, _q(30): 0.0, _q(45): 0.1}},
+        quarter_prices={_q(0): 0.02, _q(45): 0.18},
+    )
+    # 2.0 * (0.9 * 0.02 + 0.1 * 0.18) = 0.072, not 2.0 * 0.10 at the hourly mean
+    assert rows[0]["sum"] == pytest.approx(1.072)
+
+
+def test_hourly_rows_split_falls_back_to_hourly_price():
+    hour = _q(0)
+    tariff = make_tariff(24.0, 0.005)
+    # A quarter without its own price uses the hourly one.
+    partial = compute_cost_rows_from_hourly(
+        {hour: 1.0},
+        {hour: 0.05},
+        tariff,
+        prior_sum=0.0,
+        quarter_split={hour: {_q(0): 0.5, _q(15): 0.5, _q(30): 0.0, _q(45): 0.0}},
+        quarter_prices={_q(0): 0.03},
+    )
+    assert partial[0]["sum"] == pytest.approx(round(0.5 * (0.035 + 0.055) * 1.24, 4))
+    # No split for the hour, or quarters that sum to zero: the whole hour at the hourly price.
+    plain = compute_cost_rows_from_hourly({hour: 1.0}, {hour: 0.05}, tariff, prior_sum=0.0)
+    zero = {hour: {_q(m): 0.0 for m in (0, 15, 30, 45)}}
+    hourly_history = {hour: {_q(0): 1.0}}  # one reading: not 15-minute data
+    for split in ({}, zero, hourly_history):
+        rows = compute_cost_rows_from_hourly(
+            {hour: 1.0},
+            {hour: 0.05},
+            tariff,
+            prior_sum=0.0,
+            quarter_split=split,
+            quarter_prices={_q(0): 0.01},
+        )
+        assert rows == plain
+
+
+def test_hourly_rows_split_skips_hour_with_unpriced_quarter():
+    hour = _q(0)
+    rows = compute_cost_rows_from_hourly(
+        {hour: 1.0},
+        {},
+        make_tariff(0.0, 0.0),
+        prior_sum=0.0,
+        quarter_split={hour: {_q(m): 0.25 for m in (0, 15, 30, 45)}},
+        quarter_prices={_q(0): 0.03},
+    )
+    assert rows == []
+
+
+def test_hourly_rows_split_ignored_without_quarter_prices():
+    hour = _q(0)
+    tariff = make_tariff(0.0, 0.0)
+    rows = compute_cost_rows_from_hourly(
+        {hour: 1.0},
+        {hour: 0.05},
+        tariff,
+        prior_sum=0.0,
+        quarter_split={hour: {_q(0): 1.0}},
+    )
+    assert rows[0]["sum"] == pytest.approx(0.05)
