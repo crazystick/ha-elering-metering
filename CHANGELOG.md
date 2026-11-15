@@ -24,7 +24,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Security
 
-- All contributed changes were reviewed before merging. No new hosts, Python requirements or CI permissions. The only new endpoint is the Datahub sign-in on the existing `kc.elering.ee`, used once when setup rejects a key. Tariff text is parsed with YAML `safe_load` and validated before it is saved.
+- All contributed changes were reviewed before merging. No new hosts or Python requirements. The only new endpoint is the Datahub sign-in on the existing `kc.elering.ee`, used once when setup rejects a key. Tariff text is parsed with YAML `safe_load` and validated before it is saved.
+- Releases are published by a workflow when a version tag is pushed. Only that job can write, only to repository contents, and it uses no third-party actions besides the pinned checkout.
 
 ## [0.3.0] - 2026-10-05
 
