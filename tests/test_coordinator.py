@@ -1815,3 +1815,131 @@ async def test_async_rebuild_cost_since_in_future_is_noop(hass):
     coord.attach_nps_client(mock_nps)
     await coord.async_rebuild_cost(datetime.now(tz=UTC) + timedelta(days=30))
     mock_nps.async_get_prices.assert_not_called()
+
+
+def _quarters(start: datetime, kwh: list[float]) -> list[AccountingInterval]:
+    return [
+        AccountingInterval(
+            period_start=start + timedelta(minutes=15 * i),
+            consumption_kwh=value,
+            production_kwh=None,
+            consumption_m3=None,
+            production_m3=None,
+        )
+        for i, value in enumerate(kwh)
+    ]
+
+
+def _rebuild_coordinator(hass, resolution: Resolution, client: MagicMock) -> EstfeedCoordinator:
+    coord = EstfeedCoordinator(
+        hass=hass,
+        client=client,
+        slug="home",
+        options={CONF_RESOLUTION: resolution.value, CONF_BACKFILL_MONTHS: 1},
+    )
+    coord.meters = [_make_meter()]
+    mock_nps = MagicMock()
+    mock_nps.async_get_prices = AsyncMock(return_value={})
+    mock_nps.quarter_prices = MagicMock(return_value={"marker": 0.1})
+    coord.attach_nps_client(mock_nps)
+    return coord
+
+
+async def _run_rebuild(coord: EstfeedCoordinator) -> AsyncMock:
+    with (
+        patch.object(coord, "_hourly_energy_from_stats", new=AsyncMock(return_value={})),
+        patch.object(coord, "_sum_before_window", new=AsyncMock(return_value=0.0)),
+        patch(
+            "custom_components.estfeed.coordinator.async_write_cost_statistics_from_hourly",
+            new=AsyncMock(return_value=0.0),
+        ) as write,
+    ):
+        await coord.async_rebuild_cost(datetime.now(tz=UTC) - timedelta(days=2))
+    return write
+
+
+@pytest.mark.asyncio
+async def test_rebuild_with_quarter_resolution_prices_quarters(hass):
+    """With 15-min data the rebuild re-reads 15-min readings to split stored hours."""
+    h10 = (datetime.now(tz=UTC) - timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
+    client = MagicMock()
+    client.get_metering_data = AsyncMock(
+        return_value=[
+            MeterData(eic="38ZEE-00000001-A", intervals=_quarters(h10, [0.1, 0.2, 0.3, 0.4]))
+        ]
+    )
+    coord = _rebuild_coordinator(hass, Resolution.QUARTER_HOUR, client)
+    write = await _run_rebuild(coord)
+
+    assert client.get_metering_data.await_args.args[2] == Resolution.QUARTER_HOUR
+    by_stream = {c.args[1].statistic_id: c.kwargs for c in write.await_args_list}
+    cost = by_stream["estfeed:home_cost_001a"]
+    assert cost["quarter_prices"] == {"marker": 0.1}
+    assert cost["quarter_split"] == {
+        h10: {h10 + timedelta(minutes=15 * i): v for i, v in enumerate([0.1, 0.2, 0.3, 0.4])}
+    }
+    # Production readings are null here, so compensation gets an empty split.
+    assert by_stream["estfeed:home_compensation_001a"]["quarter_split"] == {}
+
+
+@pytest.mark.asyncio
+async def test_rebuild_with_hourly_resolution_does_not_fetch(hass):
+    client = MagicMock()
+    client.get_metering_data = AsyncMock()
+    coord = _rebuild_coordinator(hass, Resolution.HOUR, client)
+    write = await _run_rebuild(coord)
+
+    client.get_metering_data.assert_not_awaited()
+    for call in write.await_args_list:
+        assert call.kwargs["quarter_split"] is None
+        assert call.kwargs["quarter_prices"] is None
+
+
+@pytest.mark.asyncio
+async def test_rebuild_prices_whole_hours_when_estfeed_fails(hass, caplog):
+    client = MagicMock()
+    client.get_metering_data = AsyncMock(
+        side_effect=EstfeedAuthError("refused for 38ZEE-00000001-A")
+    )
+    coord = _rebuild_coordinator(hass, Resolution.QUARTER_HOUR, client)
+    write = await _run_rebuild(coord)
+
+    assert write.await_count == 2
+    for call in write.await_args_list:
+        assert call.kwargs["quarter_split"] is None
+        assert call.kwargs["quarter_prices"] is None
+    assert "pricing whole hours" in caplog.text
+    assert "38ZEE-00000001-A" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_quarter_splits_keep_window_and_skip_meter_errors(hass):
+    from custom_components.estfeed.api import MeterError
+
+    start = datetime(2026, 5, 21, 10, tzinfo=UTC)
+    end = start + timedelta(hours=1)
+    client = MagicMock()
+    client.get_metering_data = AsyncMock(
+        return_value=[
+            MeterData(
+                eic="38ZEE-00000001-A",
+                # One quarter before and one after the window are ignored.
+                intervals=_quarters(start - timedelta(minutes=15), [9.0, 0.1, 0.2, 0.3, 0.4, 9.0]),
+            ),
+            MeterData(
+                eic="38ZEE-00000001-A",
+                intervals=_quarters(start, [5.0]),
+                error=MeterError(id="1", message="x", code="E", trace_id="t", args=[]),
+            ),
+        ]
+    )
+    coord = _rebuild_coordinator(hass, Resolution.QUARTER_HOUR, client)
+    splits = await coord._quarter_splits(_make_meter(), {Kind.CONSUMPTION}, start, end)
+
+    assert splits == {
+        Kind.CONSUMPTION: {
+            start: {
+                start + timedelta(minutes=15 * i): v for i, v in enumerate([0.1, 0.2, 0.3, 0.4])
+            }
+        }
+    }

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
+## [0.4.1] - 2026-11-15
+
+### Fixed
+
+- With 15-minute data, recalculating costs after a price or tariff change now prices each quarter hour at its own spot price, like the regular import. Previously it priced whole hours at the hourly average until you ran `estfeed.backfill_history`. The 15-minute readings are re-read from Estfeed only to split each stored hour between its quarters, so cost stays consistent with the energy statistics. Hours without four 15-minute readings, and all hours when Estfeed cannot be read, are priced as whole hours as before.
+
+### Changed
+
+- The network day/night split (Monday to Friday 07:00–22:00, except public holidays) was checked against Elektrilevi's price list in force from 1 June 2026: it does not move in summer time. Documented in the code and README.
+
 ## [0.4.0] - 2026-11-15
 
 ### Added

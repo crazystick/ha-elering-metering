@@ -71,7 +71,10 @@ def estonia_vat_percent(at: datetime) -> float:
 
 # Network operators (Elektrilevi and others) bill the "day" rate Monday to
 # Friday 07:00-22:00 local time, except on public holidays, and the "night"
-# rate at all other times. The split does not move with daylight saving.
+# rate at all other times, in summer time too. Source: Elektrilevi network
+# price list in force from 1 June 2026 ("Mis aegadel hinnad kehtivad?").
+# Older lists (2019) moved the window to 08:00-24:00 in summer; current ones
+# do not, so this applies the same local hours all year.
 DAY_RATE_START_HOUR = 7
 DAY_RATE_END_HOUR = 22
 
@@ -514,6 +517,17 @@ def compute_cost_rows(
     return compute_cost_rows_from_hourly(hourly, prices, tariff, prior_sum)
 
 
+def _unit_cost(tariff: Tariff | CostModel, at: datetime, price: float | None) -> float | None:
+    """Per-kWh price at ``at``: incl. VAT for a ``Tariff``, excl. VAT for a ``CostModel``.
+
+    A ``CostModel`` adds its monthly-fee share and VAT once per hour, in
+    ``CostModel.with_fee_and_vat``. ``None`` when a needed spot price is missing.
+    """
+    if isinstance(tariff, CostModel):
+        return tariff.unit_price(at, price)
+    return None if price is None else tariff(at, price)
+
+
 def _quarter_cost_rows(
     intervals: list[AccountingInterval],
     kind: Kind,
@@ -532,12 +546,7 @@ def _quarter_cost_rows(
         if so_far is None:
             continue
         price = quarter_prices.get(ival.period_start, prices.get(hour))
-        unit: float | None
-        if isinstance(tariff, CostModel):
-            # Excl. VAT; the fee share and VAT are added once per hour below.
-            unit = tariff.unit_price(ival.period_start, price)
-        else:
-            unit = None if price is None else tariff(ival.period_start, price)
+        unit = _unit_cost(tariff, ival.period_start, price)
         # An hour with any unpriced interval is skipped whole, as in the hourly path.
         hourly[hour] = None if unit is None else so_far + float(value) * unit
     rows: list[StatisticData] = []
@@ -553,11 +562,38 @@ def _quarter_cost_rows(
     return rows
 
 
+def _split_hour_cost(
+    hour: datetime,
+    energy_kwh: float,
+    split: Mapping[datetime, float],
+    hourly_price: float | None,
+    quarter_prices: Mapping[datetime, float],
+    tariff: Tariff | CostModel,
+) -> float | None:
+    """Cost of one hour whose energy is shared between quarters as in ``split``.
+
+    ``split`` maps quarter start → that quarter's metered kWh. Only the
+    proportions are used, so the hour's total stays ``energy_kwh``.
+    """
+    total = sum(split.values())
+    cost = 0.0
+    for quarter, value in split.items():
+        unit = _unit_cost(tariff, quarter, quarter_prices.get(quarter, hourly_price))
+        if unit is None:
+            return None
+        cost += energy_kwh * (value / total) * unit
+    if isinstance(tariff, CostModel):
+        cost = tariff.with_fee_and_vat(hour, cost)
+    return cost
+
+
 def compute_cost_rows_from_hourly(
     hourly_energy: dict[datetime, float],
     prices: dict[datetime, float],
     tariff: Tariff | CostModel,
     prior_sum: float,
+    quarter_split: Mapping[datetime, Mapping[datetime, float]] | None = None,
+    quarter_prices: Mapping[datetime, float] | None = None,
 ) -> list[StatisticData]:
     """Build cumulative-sum cost rows from a per-hour energy map.
 
@@ -568,6 +604,13 @@ def compute_cost_rows_from_hourly(
     (fixed prices, day/night network charges, monthly fees) and can price
     fixed-price hours without a spot price. Rounds to 4 decimals (€0.0001).
 
+    With ``quarter_split`` (hour → quarter start → kWh, from 15-minute
+    readings) and ``quarter_prices``, an hour's energy is shared between its
+    quarters in the metered proportions and each share is priced at its
+    quarter's own spot price, as with 15-minute data in ``compute_cost_rows``.
+    Hours without all four quarters, or whose quarters sum to zero, use the
+    hourly price.
+
     Deriving cost from stored hourly energy (rather than re-fetched API
     intervals) keeps the cost statistic exactly consistent with the published
     consumption/production statistics it is meant to price.
@@ -575,13 +618,25 @@ def compute_cost_rows_from_hourly(
     rows: list[StatisticData] = []
     running = prior_sum
     for start in sorted(hourly_energy):
+        energy = hourly_energy[start]
         price = prices.get(start)
-        if isinstance(tariff, CostModel):
-            hour_cost = tariff.hour_cost(start, hourly_energy[start], price)
+        split = quarter_split.get(start) if quarter_split and quarter_prices is not None else None
+        hour_cost: float | None
+        # Only a full set of four readings is 15-minute data; anything else
+        # (hourly history, a partial hour) is priced as a whole hour.
+        if (
+            split is not None
+            and quarter_prices is not None
+            and len(split) == 4
+            and sum(split.values()) > 0
+        ):
+            hour_cost = _split_hour_cost(start, energy, split, price, quarter_prices, tariff)
+        elif isinstance(tariff, CostModel):
+            hour_cost = tariff.hour_cost(start, energy, price)
         elif price is None:
             hour_cost = None
         else:
-            hour_cost = hourly_energy[start] * tariff(start, price)
+            hour_cost = energy * tariff(start, price)
         if hour_cost is None:
             continue
         cost = round(hour_cost, 4)

@@ -47,7 +47,7 @@ from .statistics import (
     build_statistic_id,
     eic_suffix,
 )
-from .utils import mask_eic
+from .utils import mask_eic, mask_eics
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,10 +317,25 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
             )
             return
 
+        # With 15-minute data each quarter hour is priced at its own spot
+        # price, as on the regular fetch path. Stored statistics are hourly,
+        # so the 15-minute readings are re-fetched only to split each stored
+        # hour between its quarters; the hour's energy stays the stored one.
+        quarter_prices = (
+            self._nps.quarter_prices(start, end)
+            if self.resolution == Resolution.QUARTER_HOUR
+            else None
+        )
+
         for meter in self.meters:
             cost_streams = self.cost_streams_for(meter)
             if not cost_streams:
                 continue
+            splits = (
+                await self._quarter_splits(meter, {c.kind for c in cost_streams}, start, end)
+                if quarter_prices is not None
+                else None
+            )
             energy_id_by_kind = {s.kind: s.statistic_id for s in self.streams_for(meter)}
             for cstream in cost_streams:
                 energy_id = energy_id_by_kind.get(cstream.kind)
@@ -335,8 +350,54 @@ class EstfeedCoordinator(DataUpdateCoordinator[None]):
                     prices,
                     self._build_cost(cstream.kind),
                     prior_sum=prior_sum,
+                    quarter_split=splits.get(cstream.kind) if splits is not None else None,
+                    quarter_prices=quarter_prices if splits is not None else None,
                 )
         self.async_update_listeners()
+
+    async def _quarter_splits(
+        self,
+        meter: MeteringPoint,
+        kinds: set[Kind],
+        start: datetime,
+        end: datetime,
+    ) -> dict[Kind, dict[datetime, dict[datetime, float]]] | None:
+        """15-minute readings of ``meter`` per kind, grouped by hour, over [start, end).
+
+        Used by the cost rebuild only to share each stored hour's energy
+        between its quarters. Nothing is written. Returns ``None`` if Estfeed
+        cannot be read, so the caller prices whole hours instead.
+        """
+        splits: dict[Kind, dict[datetime, dict[datetime, float]]] = {kind: {} for kind in kinds}
+        cursor = start
+        try:
+            while cursor < end:
+                chunk_end = min(cursor + timedelta(days=MAX_DAYS_PER_REQUEST), end)
+                results = await self._client.get_metering_data(
+                    cursor, chunk_end, Resolution.QUARTER_HOUR, eics=[meter.eic]
+                )
+                for md in results:
+                    if md.error is not None:
+                        continue
+                    for ival in md.intervals:
+                        quarter = ival.period_start.astimezone(UTC)
+                        if not start <= quarter < end:
+                            continue
+                        hour = quarter.replace(minute=0, second=0, microsecond=0)
+                        for kind in kinds:
+                            value = interval_value(ival, kind)
+                            if value is not None:
+                                splits[kind].setdefault(hour, {})[quarter] = float(value)
+                cursor = chunk_end
+        except EstfeedError as err:
+            _LOGGER.warning(
+                "Could not read 15-minute data for meter %s, pricing whole hours in "
+                "the cost rebuild: %s",
+                mask_eic(meter.eic),
+                mask_eics(str(err)),
+            )
+            return None
+        return splits
 
     async def _hourly_energy_from_stats(
         self, statistic_id: str, start: datetime, end: datetime

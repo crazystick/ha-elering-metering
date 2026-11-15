@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
@@ -198,6 +199,8 @@ async def async_write_cost_statistics_from_hourly(
     prices: dict[datetime, float],
     tariff: Tariff | CostModel,
     prior_sum: float,
+    quarter_split: Mapping[datetime, Mapping[datetime, float]] | None = None,
+    quarter_prices: Mapping[datetime, float] | None = None,
 ) -> float:
     """Publish cost rows derived from a per-hour energy map.
 
@@ -206,5 +209,12 @@ async def async_write_cost_statistics_from_hourly(
     exactly consistent with the consumption/production the user already sees,
     even when Estfeed revises recent intervals between fetches.
     """
-    rows = compute_cost_rows_from_hourly(hourly_energy, prices, tariff, prior_sum=prior_sum)
+    rows = compute_cost_rows_from_hourly(
+        hourly_energy,
+        prices,
+        tariff,
+        prior_sum=prior_sum,
+        quarter_split=quarter_split,
+        quarter_prices=quarter_prices,
+    )
     return _publish_cost_rows(hass, stream, rows, prior_sum)
