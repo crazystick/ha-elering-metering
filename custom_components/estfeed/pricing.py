@@ -71,7 +71,10 @@ def estonia_vat_percent(at: datetime) -> float:
 
 # Network operators (Elektrilevi and others) bill the "day" rate Monday to
 # Friday 07:00-22:00 local time, except on public holidays, and the "night"
-# rate at all other times. The split does not move with daylight saving.
+# rate at all other times, in summer time too. Source: Elektrilevi network
+# price list in force from 1 June 2026 ("Mis aegadel hinnad kehtivad?").
+# Older lists (2019) moved the window to 08:00-24:00 in summer; current ones
+# do not, so this applies the same local hours all year.
 DAY_RATE_START_HOUR = 7
 DAY_RATE_END_HOUR = 22
 
