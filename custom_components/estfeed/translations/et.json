@@ -98,8 +98,8 @@
           "production_fee_eur_per_kwh": "Lahutatakse börsihinnast võrku müüdud energia puhul. Näide: 0,0030 EUR/kWh = 0,3 senti/kWh.",
           "backfill_months": "Kulude ümberarvutamise aken. Pikema ajaloo importimiseks kasuta ajaloo laadimise toimingut.",
           "resolution": "Soovitatav on tunnipõhine. 15-minutilised andmed vajavad rohkem API päringuid, kuid iga veerandtund arvutatakse oma börsihinnaga, nagu müüjad arveldavad alates 2025. a oktoobrist; statistika on alati tunnipõhine.",
-          "supplier_tariffs": "Valikuline YAML-loend müüja hindadest, iga periood alates `from` kuupäevast. Perioodil: `spot_margin`, `fixed_price` või `fixed_day` + `fixed_night`, lisaks valikuline `monthly_fee`. Eurodes ilma käibemaksuta. [Vorming ja näited](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)",
-          "network_tariffs": "Valikuline YAML-loend võrgu- ja riiklikest tasudest: `day`, `night`, `per_kwh`, `monthly_fee`. Päev = E–R 7–22, v.a riigipühad. Eurodes ilma käibemaksuta. [Vorming ja näited](https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs)"
+          "supplier_tariffs": "Valikuline YAML-loend müüja hindadest, iga periood alates `from` kuupäevast. Perioodil: `spot_margin`, `fixed_price` või `fixed_day` + `fixed_night`, lisaks valikuline `monthly_fee`. Eurodes ilma käibemaksuta. [Vorming ja näited]({tariffs_docs_url})",
+          "network_tariffs": "Valikuline YAML-loend võrgu- ja riiklikest tasudest: `day`, `night`, `per_kwh`, `monthly_fee`. Päev = E–R 7–22, v.a riigipühad. Eurodes ilma käibemaksuta. [Vorming ja näited]({tariffs_docs_url})"
         }
       }
     },

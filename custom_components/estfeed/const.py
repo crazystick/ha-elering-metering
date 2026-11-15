@@ -60,6 +60,9 @@ API_BASE_URL: Final = "https://estfeed.elering.ee"
 # and log in through the "elering-sso" realm.
 KEYCLOAK_TOKEN_URL: Final = "https://kc.elering.ee/realms/elering-sso/protocol/openid-connect/token"
 CUSTOMER_PORTAL_URL: Final = "https://kliendiportaal.elering.ee/"
+TARIFFS_DOCS_URL: Final = (
+    "https://github.com/mikkmihkel/ha-elering-metering#supplier-and-network-tariffs"
+)
 # Estfeed Datahub "technical users" (created at estfeed.elering.ee for market
 # participants) log in through a different realm and cannot use the customer
 # API. Only used to tell users they created the wrong kind of key.

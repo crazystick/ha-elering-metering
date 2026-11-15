@@ -55,6 +55,7 @@ from .const import (
     DOMAIN,
     MAX_BACKFILL_MONTHS,
     MIN_BACKFILL_MONTHS,
+    TARIFFS_DOCS_URL,
     VAT_MODE_CUSTOM,
     VAT_MODE_ESTONIA,
     Resolution,
@@ -369,7 +370,11 @@ class EstfeedOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        placeholders = {"supplier_error": "", "network_error": ""}
+        placeholders = {
+            "supplier_error": "",
+            "network_error": "",
+            "tariffs_docs_url": TARIFFS_DOCS_URL,
+        }
         if user_input is not None:
             data = _normalize_pricing(user_input, include_periods=True)
             checks = (

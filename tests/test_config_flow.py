@@ -536,6 +536,7 @@ async def test_options_flow_reports_errors_per_field(hass):
     }
     assert "go together" in result["description_placeholders"]["supplier_error"]
     assert "unknown key" in result["description_placeholders"]["network_error"]
+    assert result["description_placeholders"]["tariffs_docs_url"].startswith("https://")
     assert CONF_SUPPLIER_TARIFFS not in entry.options
 
 
@@ -567,3 +568,23 @@ async def test_user_step_recognises_datahub_technical_user(hass, caplog):
     assert result2["errors"] == {"base": "datahub_key"}
     assert "kliendiportaal.elering.ee" in caplog.text
     assert "csec" not in caplog.text
+
+
+def test_translations_have_no_urls():
+    """hassfest rejects URLs in translation strings; they go in placeholders."""
+    import json
+    from pathlib import Path
+
+    base = Path(__file__).parent.parent / "custom_components" / "estfeed"
+    files = [base / "strings.json", *sorted((base / "translations").glob("*.json"))]
+
+    def strings(node):
+        if isinstance(node, dict):
+            for value in node.values():
+                yield from strings(value)
+        elif isinstance(node, str):
+            yield node
+
+    for path in files:
+        for text in strings(json.loads(path.read_text(encoding="utf-8"))):
+            assert "://" not in text, f"{path.name}: {text}"
