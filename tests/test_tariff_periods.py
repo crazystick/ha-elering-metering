@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from custom_components.estfeed.api import AccountingInterval
 from custom_components.estfeed.const import (
     CONF_MARGIN_EUR_PER_KWH,
     CONF_NETWORK_TARIFFS,
@@ -22,6 +23,7 @@ from custom_components.estfeed.pricing import (
     PricingConfig,
     SupplierPeriod,
     TariffPeriodError,
+    compute_cost_rows,
     compute_cost_rows_from_hourly,
     estonia_public_holidays,
     hours_in_local_month,
@@ -277,6 +279,53 @@ def test_compute_rows_prices_fixed_hours_without_spot_prices():
     rows = compute_cost_rows_from_hourly({h1: 1.0, h2: 1.0}, {}, model, prior_sum=10.0)
     assert [r["start"] for r in rows] == [h2]
     assert rows[0]["sum"] == pytest.approx(10.0 + round((0.10 + 11.0 / 744) * 1.24, 4))
+
+
+def _quarter(start: datetime, kwh: float) -> AccountingInterval:
+    return AccountingInterval(
+        period_start=start,
+        consumption_kwh=kwh,
+        production_kwh=0.0,
+        consumption_m3=None,
+        production_m3=None,
+    )
+
+
+def test_quarter_prices_with_spot_tariff_add_fee_and_vat_once_per_hour():
+    # 15-minute data with a cost model: each quarter at its own spot price,
+    # the hour's monthly-fee share and VAT added once.
+    model = _model(network=[_NET])
+    hour = _local(2026, 12, 2, 10)  # Wednesday, day rate; December has 744 h
+    quarters = {hour + timedelta(minutes=15 * i): p for i, p in enumerate([0.02, 0.10])}
+    intervals = [_quarter(hour, 1.0), _quarter(hour + timedelta(minutes=15), 1.0)]
+    rows = compute_cost_rows(
+        intervals, Kind.CONSUMPTION, {hour: 0.06}, model, prior_sum=0.0, quarter_prices=quarters
+    )
+    network = 0.04 + 0.01
+    energy = 1.0 * (0.02 + 0.01 + network) + 1.0 * (0.10 + 0.01 + network)
+    assert [r["start"] for r in rows] == [hour]
+    assert rows[0]["sum"] == pytest.approx(round((energy + 20.0 / 744) * 1.24, 4))
+
+
+def test_quarter_prices_with_fixed_tariff_match_the_hourly_path():
+    model = _model([_WINTER], [_NET])
+    hour = _local(2026, 12, 2, 10)
+    intervals = [_quarter(hour + timedelta(minutes=15 * i), 0.5) for i in range(4)]
+    quarter = compute_cost_rows(
+        intervals, Kind.CONSUMPTION, {}, model, prior_sum=1.0, quarter_prices={}
+    )
+    hourly = compute_cost_rows_from_hourly({hour: 2.0}, {}, model, prior_sum=1.0)
+    assert [r["start"] for r in quarter] == [r["start"] for r in hourly] == [hour]
+    assert quarter[0]["sum"] == pytest.approx(hourly[0]["sum"])
+
+
+def test_quarter_prices_with_spot_tariff_skip_unpriced_hours():
+    model = _model(network=[_NET])
+    hour = _local(2026, 12, 2, 10)
+    rows = compute_cost_rows(
+        [_quarter(hour, 1.0)], Kind.CONSUMPTION, {}, model, prior_sum=0.0, quarter_prices={}
+    )
+    assert rows == []
 
 
 # ---- PricingConfig integration ----

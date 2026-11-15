@@ -344,20 +344,40 @@ class CostModel:
     def network_on(self, local_day: date) -> NetworkPeriod | None:
         return _period_on(self.network, local_day)
 
-    def hour_cost(self, hour: datetime, energy_kwh: float, spot: float | None) -> float | None:
-        local_day = hour.astimezone(_ESTONIA_TZ).date()
-        day_hour = is_network_day_hour(hour)
-        supplier = self.supplier_on(local_day)
-        unit = supplier.unit_price(day_hour, spot)
+    def unit_price(self, at: datetime, spot: float | None) -> float | None:
+        """EUR/kWh excl. VAT at ``at``, or None when a needed spot price is missing.
+
+        ``at`` may be any moment in the hour (a quarter start with 15-minute
+        data); the day/night split and the periods depend only on its hour.
+        """
+        local_day = at.astimezone(_ESTONIA_TZ).date()
+        day_hour = is_network_day_hour(at)
+        unit = self.supplier_on(local_day).unit_price(day_hour, spot)
         if unit is None:
             return None
-        fees = supplier.monthly_fee
         network = self.network_on(local_day)
         if network is not None:
             unit += network.unit_price(day_hour)
+        return unit
+
+    def fee_share(self, hour: datetime) -> float:
+        """This hour's share of the monthly fees, EUR excl. VAT."""
+        local_day = hour.astimezone(_ESTONIA_TZ).date()
+        fees = self.supplier_on(local_day).monthly_fee
+        network = self.network_on(local_day)
+        if network is not None:
             fees += network.monthly_fee
-        fee = fees / hours_in_local_month(hour) if fees else 0.0
-        return (energy_kwh * unit + fee) * (1 + self.vat_at(hour) / 100)
+        return fees / hours_in_local_month(hour) if fees else 0.0
+
+    def hour_cost(self, hour: datetime, energy_kwh: float, spot: float | None) -> float | None:
+        unit = self.unit_price(hour, spot)
+        if unit is None:
+            return None
+        return self.with_fee_and_vat(hour, energy_kwh * unit)
+
+    def with_fee_and_vat(self, hour: datetime, energy_cost: float) -> float:
+        """Add the hour's fee share to an excl.-VAT energy cost, then VAT."""
+        return (energy_cost + self.fee_share(hour)) * (1 + self.vat_at(hour) / 100)
 
 
 @dataclass(frozen=True, slots=True)
@@ -499,7 +519,7 @@ def _quarter_cost_rows(
     kind: Kind,
     prices: Mapping[datetime, float],
     quarter_prices: Mapping[datetime, float],
-    tariff: Tariff,
+    tariff: Tariff | CostModel,
     prior_sum: float,
 ) -> list[StatisticData]:
     hourly: dict[datetime, float | None] = {}
@@ -508,19 +528,26 @@ def _quarter_cost_rows(
         if value is None:
             continue
         hour = ival.period_start.replace(minute=0, second=0, microsecond=0)
-        price = quarter_prices.get(ival.period_start, prices.get(hour))
         so_far = hourly.get(hour, 0.0)
-        # An hour with any unpriced interval is skipped whole, as in the hourly path.
-        if price is None or so_far is None:
-            hourly[hour] = None
+        if so_far is None:
+            continue
+        price = quarter_prices.get(ival.period_start, prices.get(hour))
+        unit: float | None
+        if isinstance(tariff, CostModel):
+            # Excl. VAT; the fee share and VAT are added once per hour below.
+            unit = tariff.unit_price(ival.period_start, price)
         else:
-            hourly[hour] = so_far + float(value) * tariff(ival.period_start, price)
+            unit = None if price is None else tariff(ival.period_start, price)
+        # An hour with any unpriced interval is skipped whole, as in the hourly path.
+        hourly[hour] = None if unit is None else so_far + float(value) * unit
     rows: list[StatisticData] = []
     running = prior_sum
     for start in sorted(hourly):
         cost = hourly[start]
         if cost is None:
             continue
+        if isinstance(tariff, CostModel):
+            cost = tariff.with_fee_and_vat(start, cost)
         running = round(running + round(cost, 4), 4)
         rows.append({"start": start, "state": running, "sum": running})
     return rows
